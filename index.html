@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>ZenPub - EPUB 编辑器</title>
+    <meta name="description" content="在浏览器中直接撰写、编辑并导出 EPUB 电子书。" />
+    
+    <!-- 移动端 App 模式适配 -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#ffffff">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 添加 Noto Serif SC (宋体) 和 Noto Sans SC (黑体) 以更好地支持中文显示 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class', // 确保暗色模式可以通过类控制
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Noto Sans SC"', 'Inter', 'system-ui', 'sans-serif'],
+              serif: ['"Noto Serif SC"', 'Merriweather', 'serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              paper: '#fdfbf7',
+              ink: '#2d2d2d',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.2s ease-out',
+              'fade-in-up': 'fadeInUp 0.3s ease-out',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0', transform: 'scale(0.98)' },
+                '100%': { opacity: '1', transform: 'scale(1)' },
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translate(-50%, 20px)' },
+                '100%': { opacity: '1', transform: 'translate(-50%, 0)' },
+              }
+            },
+            backgroundSize: {
+              'size-200': '200% 200%',
+            },
+            backgroundPosition: {
+              'pos-0': '0% 0%',
+              'pos-100': '100% 100%',
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom scrollbar for better aesthetics */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #475569;
+      }
+      body {
+        overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile */
+        -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+      }
+      .custom-scrollbar {
+        scrollbar-width: thin;
+      }
+      /* Utility to hide scrollbar but allow scrolling */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+      }
+      
+      /* Footnote Tooltip Style */
+      .footnote-ref {
+        position: relative;
+        display: inline-block;
+        color: #4f46e5;
+        text-decoration: none;
+        font-weight: bold;
+        padding: 0 2px;
+      }
+      
+      /* Preview Mode Specifics */
+      .preview-a4 {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 20px auto;
+        padding: 25mm;
+        box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        background: white;
+      }
+      .dark .preview-a4 {
+        background: #1e293b;
+        box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        color: #e2e8f0;
+      }
+      .preview-mobile {
+        width: 375px;
+        margin: 20px auto;
+        border: 8px solid #333;
+        border-radius: 24px;
+        padding: 20px;
+        background: white;
+        min-height: 667px;
+      }
+      .dark .preview-mobile {
+        background: #1e293b;
+        border-color: #0f172a;
+        color: #e2e8f0;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "marked": "https://aistudiocdn.com/marked@^17.0.1",
+    "jszip": "https://aistudiocdn.com/jszip@^3.10.1",
+    "remark-gfm": "https://esm.sh/remark-gfm@4.0.0?bundle",
+    "html2pdf.js": "https://aistudiocdn.com/html2pdf.js@^0.12.1",
+    "turndown": "https://aistudiocdn.com/turndown@^7.2.2"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-50 text-slate-900 h-screen w-screen overflow-hidden select-none md:select-auto">
+    <div id="root" class="h-full w-full"></div>
+  </body>
+</html>

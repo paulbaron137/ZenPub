@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+}
+
+/* Utility to hide scrollbar but allow scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Footnote Tooltip Style */
+.footnote-ref {
+  position: relative;
+  display: inline-block;
+  color: #4f46e5;
+  text-decoration: none;
+  font-weight: bold;
+  padding: 0 2px;
+}
+
+/* Preview Mode Specifics */
+.preview-container-wrapper {
+  display: flex;
+  justify-content: center;
+  min-height: 100%;
+  padding: 2rem;
+}
+
+.preview-a4 {
+  width: 210mm;
+  min-height: 297mm;
+  /* margin: 20px auto; Removed to let flex handle centering */
+  padding: 25mm;
+  box-shadow: 0 0 15px rgba(0,0,0,0.1);
+  background: white;
+  flex-shrink: 0; /* Prevent shrinking */
+}
+.dark .preview-a4 {
+  background: #1e293b;
+  box-shadow: 0 0 15px rgba(0,0,0,0.5);
+  color: #e2e8f0;
+}
+
+.preview-mobile {
+  width: 375px;
+  /* margin: 20px auto; Removed to let flex handle centering */
+  border: 8px solid #333;
+  border-radius: 24px;
+  padding: 20px;
+  background: white;
+  min-height: 667px;
+  flex-shrink: 0; /* Prevent shrinking */
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+.dark .preview-mobile {
+  background: #1e293b;
+  border-color: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Desktop Default */
+.preview-desktop {
+  max-width: 65ch;
+  width: 100%;
+  min-height: 80vh;
+  background: white;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+  padding: 3rem 1.5rem;
+  margin-bottom: 2rem;
+}
+.dark .preview-desktop {
+  background: #1e293b;
+  color: #e2e8f0;
+}
