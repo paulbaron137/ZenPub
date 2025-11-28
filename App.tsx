@@ -2,17 +2,17 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { 
   Menu, BookOpen, Settings, Download, Plus, Trash2, 
   ChevronLeft, ChevronRight, PenTool, Edit3, Save, 
-  MoreVertical, FileText, Wand2, X, Image as ImageIcon,
-  Search, HelpCircle, Globe, ExternalLink, CheckCircle, AlertCircle,
-  Bold, Italic, Heading1, Heading2, List, Quote, Link, Minus, 
+  MoreVertical, FileText, X, Image as ImageIcon,
+  HelpCircle, ExternalLink, CheckCircle, AlertCircle,
+  Bold, Italic, Heading1, Heading2, Heading3, List, Quote, Link, Minus, 
   MessageSquare, StickyNote, Type, Undo, Redo, AlignVerticalJustifyCenter,
-  Smartphone, Monitor, File as FileIcon, History, Clock, Upload, FileDown, RotateCcw
+  Smartphone, Monitor, File as FileIcon, History, Clock, Upload, FileDown, RotateCcw,
+  Search as SearchIcon, Replace, ArrowDown, ArrowUp, XCircle
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { BookMetadata, Chapter, ViewMode, AIState, SearchResult, Snapshot, PreviewConfig } from './types';
+import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig } from './types';
 import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './services/epubService';
-import { generateWritingSuggestion, performResearch } from './services/geminiService';
 
 // --- Constants & Defaults ---
 
@@ -41,20 +41,31 @@ const DEFAULT_PREVIEW_CONFIG: PreviewConfig = {
 };
 
 const HELP_CONTENT = `
+## ⌨️ 快捷键指南
+- **撤销**: \`Ctrl + Z\`
+- **重做**: \`Ctrl + Shift + Z\` 或 \`Ctrl + Y\`
+- **保存快照**: \`Ctrl + S\`
+- **加粗**: \`Ctrl + B\`
+- **斜体**: \`Ctrl + I\`
+- **插入链接**: \`Ctrl + K\`
+- **查找替换**: \`Ctrl + F\`
+- **标题 1**: \`Ctrl + 1\`
+- **标题 2**: \`Ctrl + 2\`
+- **标题 3**: \`Ctrl + 3\`
+
 ## Markdown 写作指南
 - **加粗**: \`**文本**\`
 - *斜体*: \`*文本*\`
-- 标题: \`# 标题1\`, \`## 标题2\`
 - 列表: \`- 项目\`
 - 引用: \`> 引用\`
 - 代码块: \`\`\`代码\`\`\`
 - 脚注: \`[^1]\` 和 \`[^1]: 说明\`
 - 图片: \`![描述](链接)\`
 
-## v2.0.3 新特性
-- **自动保存**: 内容变更自动存入快照。
-- **图片插入**: 支持上传本地图片或输入网络链接。
-- **链接优化**: 更智能的链接插入交互。
+## v2.2 新特性
+- **查找替换**: 支持当前章节内的查找与替换。
+- **快捷键增强**: 新增多项编辑快捷键。
+- **打字机模式**: 让光标始终保持在屏幕中央。
 `;
 
 // --- Components ---
@@ -83,6 +94,13 @@ const App: React.FC = () => {
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
+  // Search & Replace State
+  const [showSearchPanel, setShowSearchPanel] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
+  const [matchCount, setMatchCount] = useState(0);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+
   // Undo/Redo
   const [history, setHistory] = useState<string[]>([]);
   const [historyPtr, setHistoryPtr] = useState(-1);
@@ -92,25 +110,14 @@ const App: React.FC = () => {
   // Modals
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
-  const [showAiModal, setShowAiModal] = useState(false);
-  const [aiTab, setAiTab] = useState<'write' | 'research'>('write');
-
-  // AI State
-  const [aiState, setAiState] = useState<AIState>({
-    isLoading: false,
-    error: null,
-    suggestion: null,
-    searchResults: []
-  });
-  const [searchQuery, setSearchQuery] = useState('');
-
+  
   // Toast State
   const [toast, setToast] = useState<{message: string, type: 'success'|'error'} | null>(null);
 
   // Refs
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null); // New ref for inline image upload
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // --- Derived State ---
   const activeChapter = chapters.find(c => c.id === activeChapterId) || chapters[0];
@@ -154,6 +161,22 @@ const App: React.FC = () => {
     if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
   }, [activeChapterId]);
 
+  // Search Effect
+  useEffect(() => {
+    if (!findText || !editorRef.current) {
+      setMatchCount(0);
+      setCurrentMatchIndex(-1);
+      return;
+    }
+    const content = activeChapter.content;
+    const matches = content.split(findText).length - 1;
+    setMatchCount(matches);
+    if (matches > 0 && currentMatchIndex === -1) {
+       setCurrentMatchIndex(0);
+    }
+  }, [findText, activeChapter.content]);
+
+
   // --- Handlers ---
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -166,11 +189,10 @@ const App: React.FC = () => {
     ));
   };
 
-  // Main input handler with debounce for history and snapshots
   const handleContentInput = (newContent: string) => {
     updateChapterContent(newContent);
 
-    // Typewriter Scrolling Logic
+    // Typewriter Logic
     if (isTypewriterMode && editorRef.current) {
         const textarea = editorRef.current;
         const val = textarea.value;
@@ -182,7 +204,7 @@ const App: React.FC = () => {
         textarea.scrollTop = estimatedTop - (containerHeight / 2);
     }
 
-    // Debounce history
+    // History Debounce
     if (historyTimeoutRef.current) clearTimeout(historyTimeoutRef.current);
     historyTimeoutRef.current = window.setTimeout(() => {
       setHistory(prev => {
@@ -193,11 +215,11 @@ const App: React.FC = () => {
       setHistoryPtr(prev => prev + 1);
     }, 600);
 
-    // Snapshot Timer (Auto-save logic)
+    // Snapshot Timer
     if (snapshotTimeoutRef.current) clearTimeout(snapshotTimeoutRef.current);
     snapshotTimeoutRef.current = window.setTimeout(() => {
-        createSnapshot(newContent, "自动保存");
-    }, 2 * 60 * 1000); // Changed to 2 mins for better auto-save
+        createSnapshot(newContent, "自动备份");
+    }, 2 * 60 * 1000);
   };
 
   const createSnapshot = (content: string, desc: string) => {
@@ -209,7 +231,7 @@ const App: React.FC = () => {
           description: desc
       };
       setSnapshots(prev => [newSnap, ...prev].slice(0, 50));
-      if (desc !== "自动保存") showToast("快照已保存");
+      if (desc !== "自动备份") showToast("快照已保存");
   };
 
   const restoreSnapshot = (snap: Snapshot) => {
@@ -253,20 +275,108 @@ const App: React.FC = () => {
     }
   };
 
+  // Search & Replace Logic
+  const handleFindNext = () => {
+    if (!findText || matchCount === 0) return;
+    const nextIndex = (currentMatchIndex + 1) % matchCount;
+    setCurrentMatchIndex(nextIndex);
+    // Highlight logic would be complex in textarea, so we just scroll/select
+    scrollToMatch(nextIndex);
+  };
+
+  const handleFindPrev = () => {
+    if (!findText || matchCount === 0) return;
+    const prevIndex = (currentMatchIndex - 1 + matchCount) % matchCount;
+    setCurrentMatchIndex(prevIndex);
+    scrollToMatch(prevIndex);
+  };
+
+  const scrollToMatch = (index: number) => {
+     if (!editorRef.current || !findText) return;
+     const textarea = editorRef.current;
+     const content = textarea.value;
+     let pos = -1;
+     for (let i = 0; i <= index; i++) {
+       pos = content.indexOf(findText, pos + 1);
+     }
+     if (pos !== -1) {
+       textarea.focus();
+       textarea.setSelectionRange(pos, pos + findText.length);
+       // Simple scroll adjustment
+       const lineHeight = 20;
+       const lines = content.substring(0, pos).split('\n').length;
+       textarea.scrollTop = lines * lineHeight - textarea.clientHeight / 2;
+     }
+  };
+
+  const handleReplace = () => {
+    if (!findText || !editorRef.current) return;
+    const textarea = editorRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = textarea.value.substring(start, end);
+    
+    if (selected === findText) {
+       const newContent = textarea.value.substring(0, start) + replaceText + textarea.value.substring(end);
+       handleContentInput(newContent);
+       // Move to next match
+       setTimeout(handleFindNext, 0);
+    } else {
+       handleFindNext();
+    }
+  };
+
+  const handleReplaceAll = () => {
+    if (!findText) return;
+    const newContent = activeChapter.content.replaceAll(findText, replaceText);
+    handleContentInput(newContent);
+    showToast("已全部替换");
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-      e.preventDefault();
-      if (e.shiftKey) {
-        handleRedo();
-      } else {
-        handleUndo();
+    if (e.ctrlKey || e.metaKey) {
+      switch(e.key.toLowerCase()) {
+        case 'z':
+          e.preventDefault();
+          e.shiftKey ? handleRedo() : handleUndo();
+          break;
+        case 'y':
+          e.preventDefault();
+          handleRedo();
+          break;
+        case 's':
+          e.preventDefault();
+          createSnapshot(activeChapter.content, "手动保存");
+          break;
+        case 'b':
+          e.preventDefault();
+          insertSyntax('**', '**');
+          break;
+        case 'i':
+          e.preventDefault();
+          insertSyntax('*', '*');
+          break;
+        case 'k':
+          e.preventDefault();
+          handleInsertLink();
+          break;
+        case 'f':
+          e.preventDefault();
+          setShowSearchPanel(true);
+          break;
+        case '1':
+          e.preventDefault();
+          insertSyntax('# ');
+          break;
+        case '2':
+          e.preventDefault();
+          insertSyntax('## ');
+          break;
+        case '3':
+          e.preventDefault();
+          insertSyntax('### ');
+          break;
       }
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-      e.preventDefault();
-      handleRedo();
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
-      createSnapshot(activeChapter.content, "手动保存");
     }
   };
 
@@ -282,10 +392,13 @@ const App: React.FC = () => {
     ));
   };
 
-  // Enhanced Syntax Insertion
   const insertSyntax = (prefix: string, suffix: string = '') => {
     if (!editorRef.current) return;
     const textarea = editorRef.current;
+    
+    // Save scroll position
+    const scrollTop = textarea.scrollTop;
+    
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = textarea.value;
@@ -301,14 +414,13 @@ const App: React.FC = () => {
     });
     setHistoryPtr(prev => prev + 1);
     
+    // Restore cursor and scroll position
     setTimeout(() => {
       if (!editorRef.current) return;
       editorRef.current.focus();
-      if (selection.length > 0) {
-           editorRef.current.setSelectionRange(start, start + prefix.length + selection.length + suffix.length);
-      } else {
-           editorRef.current.setSelectionRange(start + prefix.length, start + prefix.length);
-      }
+      const newCursorPos = start + prefix.length + selection.length + suffix.length;
+      editorRef.current.setSelectionRange(start + prefix.length, newCursorPos);
+      editorRef.current.scrollTop = scrollTop; // Restore scroll
     }, 0);
   };
 
@@ -317,6 +429,8 @@ const App: React.FC = () => {
     if (url) {
       if (!editorRef.current) return;
       const textarea = editorRef.current;
+      const scrollTop = textarea.scrollTop; // Save scroll
+      
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const selection = textarea.value.substring(start, end);
@@ -324,19 +438,19 @@ const App: React.FC = () => {
       
       const markdownLink = `[${linkText}](${url})`;
       const newText = textarea.value.substring(0, start) + markdownLink + textarea.value.substring(end);
-      handleContentInput(newText); // Use main handler for history/debounce
+      handleContentInput(newText);
       
       setTimeout(() => {
         if (editorRef.current) {
           editorRef.current.focus();
           editorRef.current.setSelectionRange(start + markdownLink.length, start + markdownLink.length);
+          editorRef.current.scrollTop = scrollTop; // Restore scroll
         }
       }, 0);
     }
   };
 
   const handleInsertImage = () => {
-    // Option to upload or URL
     if (confirm("点击“确定”上传本地图片，点击“取消”输入网络图片地址")) {
        imageInputRef.current?.click();
     } else {
@@ -353,7 +467,6 @@ const App: React.FC = () => {
         const reader = new FileReader();
         reader.onloadend = () => {
            const base64 = reader.result as string;
-           // Creating a concise reference if possible, but base64 inline is standard for simple tools
            insertSyntax(`![本地图片](${base64})`);
            showToast("图片已插入");
         };
@@ -440,70 +553,6 @@ const App: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // AI Helpers
-  const handleAiAssist = async (task: any) => {
-    if (!editorRef.current) return;
-    const textarea = editorRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-    const context = selectedText.length > 2 ? selectedText : textarea.value; 
-
-    setAiState(prev => ({ ...prev, isLoading: true, error: null, suggestion: null }));
-    
-    try {
-      const suggestion = await generateWritingSuggestion("Help me write", context, task);
-      setAiState(prev => ({ ...prev, isLoading: false, error: null, suggestion }));
-    } catch (err) {
-      setAiState(prev => ({ ...prev, isLoading: false, error: "AI 服务暂时不可用", suggestion: null }));
-    }
-  };
-
-  const handleAiSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setAiState(prev => ({ ...prev, isLoading: true, error: null, searchResults: undefined }));
-    try {
-      const result = await performResearch(searchQuery);
-      setAiState(prev => ({ 
-        ...prev, 
-        isLoading: false, 
-        suggestion: result.text, 
-        searchResults: result.sources.length > 0 ? result.sources : undefined 
-      }));
-    } catch (err) {
-      setAiState(prev => ({ ...prev, isLoading: false, error: "搜索失败，请检查网络", suggestion: null }));
-    }
-  };
-
-  const applyAiSuggestion = () => {
-    if (!aiState.suggestion || !editorRef.current) return;
-    const textarea = editorRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    
-    const currentContent = activeChapter.content;
-    const selectedText = currentContent.substring(start, end);
-    
-    let newContent = "";
-    if (selectedText.length > 2) {
-      newContent = currentContent.substring(0, start) + aiState.suggestion + currentContent.substring(end);
-    } else {
-      newContent = currentContent + "\n\n" + aiState.suggestion;
-    }
-
-    updateChapterContent(newContent);
-    setHistory(prev => {
-        const newHistory = prev.slice(0, historyPtr + 1);
-        newHistory.push(newContent);
-        return newHistory;
-      });
-    setHistoryPtr(prev => prev + 1);
-
-    setShowAiModal(false);
-    setAiState(prev => ({ ...prev, isLoading: false, error: null, suggestion: null }));
-    showToast("内容已应用");
-  };
-
   const isDark = theme === 'dark';
 
   return (
@@ -519,7 +568,7 @@ const App: React.FC = () => {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-md transition ${isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-black/5 text-gray-600'}`}><Menu size={20} /></button>
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
-            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.0.3</span></h1>
+            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.2</span></h1>
           </div>
         </div>
 
@@ -595,37 +644,53 @@ const App: React.FC = () => {
           <div className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 relative ${viewMode === 'preview' ? 'hidden' : 'flex'} ${viewMode === 'split' ? 'w-1/2 border-r dark:border-slate-700' : 'w-full'} bg-white dark:bg-slate-900`}>
             <div className={`h-12 flex-none flex items-center justify-between px-2 sm:px-4 border-b space-x-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
                <div className="flex items-center flex-1 overflow-x-auto no-scrollbar space-x-1 pr-2">
-                  {/* Undo/Redo */}
-                  <button onClick={handleUndo} disabled={historyPtr <= 0} className={`p-2 rounded transition ${historyPtr > 0 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`}><Undo size={16}/></button>
-                  <button onClick={handleRedo} disabled={historyPtr >= history.length - 1} className={`p-2 rounded transition ${historyPtr < history.length - 1 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`}><Redo size={16}/></button>
+                  <button onClick={handleUndo} disabled={historyPtr <= 0} className={`p-1.5 rounded transition ${historyPtr > 0 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="撤销 (Ctrl+Z)"><Undo size={16}/></button>
+                  <button onClick={handleRedo} disabled={historyPtr >= history.length - 1} className={`p-1.5 rounded transition ${historyPtr < history.length - 1 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="重做 (Ctrl+Y)"><Redo size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
                   
-                  {/* Format */}
-                  <button onClick={() => insertSyntax('**', '**')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Bold size={16}/></button>
-                  <button onClick={() => insertSyntax('*', '*')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Italic size={16}/></button>
+                  <button onClick={() => insertSyntax('**', '**')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="加粗 (Ctrl+B)"><Bold size={16}/></button>
+                  <button onClick={() => insertSyntax('*', '*')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="斜体 (Ctrl+I)"><Italic size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
-                  <button onClick={() => insertSyntax('# ')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Heading1 size={16}/></button>
-                  <button onClick={() => insertSyntax('## ')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Heading2 size={16}/></button>
+                  <button onClick={() => insertSyntax('# ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题1 (Ctrl+1)"><Heading1 size={16}/></button>
+                  <button onClick={() => insertSyntax('## ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题2 (Ctrl+2)"><Heading2 size={16}/></button>
+                  <button onClick={() => insertSyntax('### ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题3 (Ctrl+3)"><Heading3 size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
-                  <button onClick={() => insertSyntax('- ')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><List size={16}/></button>
-                  <button onClick={() => insertSyntax('> ')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Quote size={16}/></button>
-                  <button onClick={() => insertSyntax('\n---\n')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="分割线"><Minus size={16}/></button>
+                  <button onClick={() => insertSyntax('- ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><List size={16}/></button>
+                  <button onClick={() => insertSyntax('> ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Quote size={16}/></button>
+                  <button onClick={() => insertSyntax('\n---\n')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Minus size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
-                  
-                  {/* Link (Optimized) */}
-                  <button onClick={handleInsertLink} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接"><Link size={16}/></button>
-                  {/* Image (New) */}
-                  <button onClick={handleInsertImage} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入图片"><ImageIcon size={16}/></button>
-                  
-                  <button onClick={() => insertSyntax('[^1]')} className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'} font-mono text-xs`} title="插入脚注">[^1]</button>
+                  <button onClick={handleInsertLink} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接 (Ctrl+K)"><Link size={16}/></button>
+                  <button onClick={handleInsertImage} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><ImageIcon size={16}/></button>
+                  <button onClick={() => setShowSearchPanel(!showSearchPanel)} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'} ${showSearchPanel ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600' : ''}`} title="查找替换 (Ctrl+F)"><SearchIcon size={16}/></button>
                </div>
-               
                <div className="flex items-center space-x-2 pl-2 border-l dark:border-slate-700 flex-none">
                   <button onClick={() => setIsTypewriterMode(!isTypewriterMode)} className={`p-2 rounded transition ${isTypewriterMode ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`} title="打字机模式"><AlignVerticalJustifyCenter size={18} /></button>
-                  <button onClick={() => setShowAiModal(true)} className="group flex items-center space-x-1.5 text-xs font-medium bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 bg-size-200 bg-pos-0 hover:bg-pos-100 text-white px-2.5 py-1.5 rounded-full transition-all"><Wand2 size={12} className="group-hover:rotate-12 transition-transform" /><span className="hidden xs:inline">AI</span></button>
                   <button onClick={() => setMemoOpen(!memoOpen)} className={`p-2 rounded transition relative ${memoOpen ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'hover:bg-gray-100 text-gray-400 dark:hover:bg-slate-700'}`}><StickyNote size={18}/>{activeChapter.memo && activeChapter.memo.trim().length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800"></span>}</button>
                </div>
             </div>
+
+            {/* Search Panel */}
+            {showSearchPanel && (
+              <div className={`flex-none px-4 py-2 border-b flex items-center space-x-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
+                 <div className="flex items-center border rounded px-2 py-1 bg-white dark:bg-slate-700 dark:border-slate-600">
+                    <SearchIcon size={14} className="text-gray-400 mr-2"/>
+                    <input type="text" value={findText} onChange={(e) => setFindText(e.target.value)} placeholder="查找..." className="outline-none bg-transparent text-sm w-32"/>
+                 </div>
+                 <div className="flex items-center border rounded px-2 py-1 bg-white dark:bg-slate-700 dark:border-slate-600">
+                    <Replace size={14} className="text-gray-400 mr-2"/>
+                    <input type="text" value={replaceText} onChange={(e) => setReplaceText(e.target.value)} placeholder="替换为..." className="outline-none bg-transparent text-sm w-32"/>
+                 </div>
+                 <div className="flex items-center space-x-1">
+                    <button onClick={handleFindPrev} className="p-1 hover:bg-gray-200 dark:hover:bg-slate-600 rounded"><ArrowUp size={14}/></button>
+                    <button onClick={handleFindNext} className="p-1 hover:bg-gray-200 dark:hover:bg-slate-600 rounded"><ArrowDown size={14}/></button>
+                 </div>
+                 <span className="text-xs text-gray-400 w-16 text-center">{matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '0/0'}</span>
+                 <button onClick={handleReplace} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600">替换</button>
+                 <button onClick={handleReplaceAll} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600">全部替换</button>
+                 <button onClick={() => setShowSearchPanel(false)} className="ml-auto text-gray-400 hover:text-red-500"><XCircle size={16}/></button>
+              </div>
+            )}
+
             <div className={`flex-none px-4 sm:px-6 pt-6 pb-2 ${isDark ? 'bg-slate-900' : 'bg-white'}`}><input type="text" value={activeChapter.title} onChange={(e) => handleUpdateTitle(e.target.value)} className={`w-full text-2xl font-bold bg-transparent border-none focus:ring-0 placeholder-gray-300 dark:placeholder-slate-700 p-0 ${isDark ? 'text-white' : 'text-gray-900'}`} placeholder="输入章节标题..." /></div>
             <textarea ref={editorRef} className={`flex-1 w-full px-4 sm:px-6 py-4 resize-none outline-none font-mono text-base sm:text-sm leading-7 custom-scrollbar ${isDark ? 'bg-slate-900 text-slate-300 selection:bg-indigo-500/30' : 'bg-white text-slate-700 selection:bg-indigo-100'}`} value={activeChapter.content} onChange={(e) => handleContentInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="在此处开始您的创作..." spellCheck={false} />
           </div>
@@ -679,8 +744,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* --- MODALS --- */}
-      
+      {/* --- MODALS (Snapshot, Settings, Help) --- */}
       {showSnapshotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
@@ -716,7 +780,11 @@ const App: React.FC = () => {
                <div className="grid grid-cols-2 gap-5">
                  <div className="col-span-2 sm:col-span-1 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">书名</label><input type="text" value={metadata.title} onChange={(e) => setMetadata({...metadata, title: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
                  <div className="col-span-2 sm:col-span-1 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">作者</label><input type="text" value={metadata.author} onChange={(e) => setMetadata({...metadata, author: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
-                 {/* ... Other metadata inputs ... */}
+                 {/* ... Other fields ... */}
+                 <div className="col-span-2 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">出版社</label><input type="text" value={metadata.publisher || ''} onChange={(e) => setMetadata({...metadata, publisher: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
+                 <div className="col-span-2 sm:col-span-1 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">ISBN</label><input type="text" value={metadata.isbn || ''} onChange={(e) => setMetadata({...metadata, isbn: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
+                 <div className="col-span-2 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">标签 (逗号分隔)</label><input type="text" value={metadata.tags?.join(', ') || ''} onChange={(e) => setMetadata({...metadata, tags: e.target.value.split(',').map(t => t.trim())})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
+                 <div className="col-span-2 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">简介</label><textarea value={metadata.description || ''} onChange={(e) => setMetadata({...metadata, description: e.target.value})} className={`w-full px-3 py-2 border rounded-lg h-24 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition resize-none ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
                  <div className="col-span-2 pt-2 border-t border-dashed dark:border-slate-700"><label className="block text-xs font-bold text-gray-500 uppercase mb-3">封面设计</label><div className="flex items-start space-x-5"><div className={`w-28 h-40 flex-none rounded-lg shadow-md flex items-center justify-center overflow-hidden border-2 border-dashed ${metadata.coverData ? 'border-transparent' : 'border-gray-300 dark:border-slate-600 bg-gray-100 dark:bg-slate-700'}`}>{metadata.coverData ? <img src={metadata.coverData} alt="Cover" className="w-full h-full object-cover" /> : <ImageIcon className="text-gray-400" size={32} />}</div><div className="flex-1 space-y-3"><label className="inline-block"><span className="bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-200 text-sm font-medium py-2 px-4 rounded-lg cursor-pointer transition shadow-sm">选择图片...</span><input type="file" accept="image/*" onChange={handleCoverUpload} className="hidden"/></label><p className="text-xs text-gray-500 leading-relaxed">建议比例 1:1.5 (例如 1600x2400 像素)。<br/>支持 JPG, PNG 格式，最大 2MB。</p>{metadata.coverData && (<button onClick={() => setMetadata({...metadata, coverData: undefined, coverMimeType: undefined})} className="text-xs text-red-500 hover:underline">移除封面</button>)}</div></div></div>
                </div>
             </div>
@@ -741,52 +809,7 @@ const App: React.FC = () => {
              <div className="p-8 overflow-y-auto max-h-[60vh] custom-scrollbar">
                <div className={`prose prose-sm ${isDark ? 'prose-invert' : 'prose-indigo'}`}><ReactMarkdown>{HELP_CONTENT}</ReactMarkdown></div>
              </div>
-             <div className={`p-4 border-t text-center text-xs text-gray-400 ${isDark ? 'border-slate-700' : 'bg-gray-50'}`}>ZenPub v2.0.3 &copy; 2024</div>
-          </div>
-        </div>
-      )}
-      
-      {/* AI Modal - Same as previous */}
-       {showAiModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
-            <div className="p-4 border-b dark:border-slate-700 flex justify-between items-center flex-none bg-gray-50/50 dark:bg-white/5">
-              <div className="flex space-x-1 bg-gray-200 dark:bg-slate-700 p-1 rounded-lg">
-                <button onClick={() => setAiTab('write')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${aiTab === 'write' ? 'bg-white dark:bg-slate-600 shadow text-indigo-600 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400'}`}><span className="flex items-center"><Wand2 size={14} className="mr-1.5"/>写作辅助</span></button>
-                <button onClick={() => setAiTab('research')} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${aiTab === 'research' ? 'bg-white dark:bg-slate-600 shadow text-indigo-600 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400'}`}><span className="flex items-center"><Search size={14} className="mr-1.5"/>AI 研究员</span></button>
-              </div>
-              <button onClick={() => setShowAiModal(false)} className="hover:bg-gray-200 dark:hover:bg-slate-700 p-1 rounded-full transition"><X size={20} className="text-gray-400" /></button>
-            </div>
-            <div className="p-6 flex-1 overflow-y-auto custom-scrollbar">
-              {aiTab === 'write' ? (
-                 <div className="space-y-6">
-                    {!aiState.suggestion ? (
-                      <>
-                        <div className="text-center py-4"><h4 className="text-lg font-bold mb-2">智能写作助手</h4><p className="text-sm text-gray-500">选中编辑器中的文本，点击下方功能进行优化。</p></div>
-                        <div className="grid grid-cols-2 gap-4">
-                          {[{id: 'grammar', label: '✍️ 语法修正', sub: '纠正错别字和语病'}, {id: 'expand', label: '✨ 扩写润色', sub: '丰富细节，提升文采'}, {id: 'summarize', label: '📝 总结摘要', sub: '提炼核心观点'}, {id: 'continue', label: '🚀 智能续写', sub: '根据上文继续创作'}].map(opt => (
-                            <button key={opt.id} onClick={() => handleAiAssist(opt.id as any)} disabled={aiState.isLoading} className={`p-4 border rounded-xl hover:shadow-md transition text-left group ${isDark ? 'border-slate-700 hover:bg-slate-700' : 'border-gray-200 hover:border-indigo-200 hover:bg-indigo-50'}`}><span className="block font-bold text-gray-800 dark:text-gray-200 mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{opt.label}</span><span className="text-xs text-gray-500 dark:text-gray-400">{opt.sub}</span></button>
-                          ))}
-                        </div>
-                        {aiState.isLoading && <div className="text-center text-sm text-indigo-500 mt-4 animate-pulse">正在思考中...</div>}
-                      </>
-                    ) : (
-                      <div className="space-y-4 animate-fade-in">
-                        <div className="flex justify-between items-center mb-2"><span className="text-xs font-bold text-gray-400 uppercase">AI 建议</span></div>
-                        <div className={`p-5 rounded-xl text-sm leading-relaxed max-h-[40vh] overflow-y-auto border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-indigo-50/50 border-indigo-100'}`}><ReactMarkdown>{aiState.suggestion}</ReactMarkdown></div>
-                        <div className="flex space-x-3 pt-2"><button onClick={() => setAiState({ ...aiState, suggestion: null })} className={`px-4 py-2 border rounded-lg text-sm font-medium transition ${isDark ? 'border-slate-600 hover:bg-slate-700' : 'border-gray-300 hover:bg-gray-50'}`}>返回</button><button onClick={applyAiSuggestion} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-lg shadow-indigo-500/20">应用采纳</button></div>
-                      </div>
-                    )}
-                 </div>
-              ) : (
-                <div className="space-y-5 h-full flex flex-col">
-                   <div className="flex space-x-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()} placeholder="输入问题..." className={`w-full pl-10 pr-4 py-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-gray-50 border-gray-200'}`} /></div><button onClick={handleAiSearch} disabled={aiState.isLoading || !searchQuery.trim()} className="bg-indigo-600 text-white px-5 rounded-xl font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition">搜索</button></div>
-                   {aiState.isLoading && <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-3"><div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div><span className="text-sm">正在检索...</span></div>}
-                   {!aiState.isLoading && !aiState.suggestion && <div className="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-50"><Globe size={48} className="mb-4 stroke-1"/><p className="text-sm">AI 研究员</p></div>}
-                   {aiState.suggestion && <div className="flex-1 overflow-y-auto space-y-4 pr-1 animate-fade-in"><div className={`p-5 rounded-xl text-sm leading-relaxed border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-100 shadow-sm'}`}><ReactMarkdown className={`prose prose-sm max-w-none ${isDark ? 'prose-invert' : ''}`}>{aiState.suggestion}</ReactMarkdown></div>{aiState.searchResults && <div className="space-y-3 pl-1"><h4 className="text-xs font-bold uppercase text-gray-500 flex items-center"><ExternalLink size={12} className="mr-1"/> 参考来源</h4><div className="grid gap-2">{aiState.searchResults.map((source, idx) => (<a key={idx} href={source.uri} target="_blank" rel="noopener noreferrer" className={`block p-3 rounded-lg text-xs transition border ${isDark ? 'bg-slate-800 border-slate-700 hover:bg-slate-700' : 'bg-gray-50 border-gray-100 hover:bg-white hover:shadow-sm hover:border-indigo-100'}`}><div className="font-medium text-indigo-500 mb-0.5 truncate">{source.title}</div><div className="text-gray-400 truncate">{source.uri}</div></a>))}</div></div>}</div>}
-                </div>
-              )}
-            </div>
+             <div className={`p-4 border-t text-center text-xs text-gray-400 ${isDark ? 'border-slate-700' : 'bg-gray-50'}`}>ZenPub v2.2 &copy; 2024</div>
           </div>
         </div>
       )}
