@@ -1,7 +1,7 @@
 {
   "name": "zenpub",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "*",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "marked": "^12.0.0",
