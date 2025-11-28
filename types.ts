@@ -18,18 +18,6 @@ export interface BookMetadata {
   tags?: string[];
 }
 
-export interface SearchResult {
-  text: string;
-  sources: { title: string; uri: string }[];
-}
-
-export interface AIState {
-  isLoading: boolean;
-  error: string | null;
-  suggestion: string | null;
-  searchResults?: SearchResult[];
-}
-
 export interface Snapshot {
   id: string;
   timestamp: number;
