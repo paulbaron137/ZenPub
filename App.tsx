@@ -53,19 +53,10 @@ const HELP_CONTENT = `
 - **标题 2**: \`Ctrl + 2\`
 - **标题 3**: \`Ctrl + 3\`
 
-## Markdown 写作指南
-- **加粗**: \`**文本**\`
-- *斜体*: \`*文本*\`
-- 列表: \`- 项目\`
-- 引用: \`> 引用\`
-- 代码块: \`\`\`代码\`\`\`
-- 脚注: \`[^1]\` 和 \`[^1]: 说明\`
-- 图片: \`![描述](链接)\`
-
-## v2.2 新特性
+## v2.2.1 新特性
+- **可调节分屏**: 拖动侧边栏或预览区的边框，自由调整宽度。
 - **查找替换**: 支持当前章节内的查找与替换。
 - **快捷键增强**: 新增多项编辑快捷键。
-- **打字机模式**: 让光标始终保持在屏幕中央。
 `;
 
 // --- Components ---
@@ -75,6 +66,14 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () 
     {type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
     <span className="text-sm font-medium">{message}</span>
   </div>
+);
+
+// Resizer Component
+const Resizer: React.FC<{ onMouseDown: (e: React.MouseEvent) => void, vertical?: boolean }> = ({ onMouseDown, vertical = true }) => (
+  <div 
+    className={`z-20 flex-none hover:bg-indigo-500/50 transition-colors select-none ${vertical ? 'w-1 cursor-col-resize hover:w-1.5 -mr-0.5 -ml-0.5' : 'h-1 cursor-row-resize hover:h-1.5 -mt-0.5 -mb-0.5'}`} 
+    onMouseDown={onMouseDown}
+  />
 );
 
 const App: React.FC = () => {
@@ -87,6 +86,11 @@ const App: React.FC = () => {
   const [memoOpen, setMemoOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   
+  // Layout State
+  const [sidebarWidth, setSidebarWidth] = useState(256); // Initial 64rem (w-64) approx 256px
+  const [editorWidthPercent, setEditorWidthPercent] = useState(50); // 50% split by default
+  const isResizing = useRef<'sidebar' | 'editor' | null>(null);
+
   // Feature States
   const [isTypewriterMode, setIsTypewriterMode] = useState(false);
   const [previewConfig, setPreviewConfig] = useState<PreviewConfig>(DEFAULT_PREVIEW_CONFIG);
@@ -118,6 +122,7 @@ const App: React.FC = () => {
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // --- Derived State ---
   const activeChapter = chapters.find(c => c.id === activeChapterId) || chapters[0];
@@ -131,6 +136,55 @@ const App: React.FC = () => {
   }, [activeChapter.content, chapters]);
 
   // --- Effects ---
+  
+  // Resizing Logic
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+
+      if (isResizing.current === 'sidebar') {
+        const newWidth = Math.max(200, Math.min(450, e.clientX)); // Min 200px, Max 450px
+        setSidebarWidth(newWidth);
+      } else if (isResizing.current === 'editor' && containerRef.current) {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const relativeX = e.clientX - containerRect.left;
+        const newPercent = (relativeX / containerRect.width) * 100;
+        // Clamp between 20% and 80%
+        setEditorWidthPercent(Math.max(20, Math.min(80, newPercent)));
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    if (isResizing) {
+       window.addEventListener('mousemove', handleMouseMove);
+       window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const startResizingSidebar = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = 'sidebar';
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const startResizingEditor = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = 'editor';
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 768) {
@@ -280,7 +334,6 @@ const App: React.FC = () => {
     if (!findText || matchCount === 0) return;
     const nextIndex = (currentMatchIndex + 1) % matchCount;
     setCurrentMatchIndex(nextIndex);
-    // Highlight logic would be complex in textarea, so we just scroll/select
     scrollToMatch(nextIndex);
   };
 
@@ -302,7 +355,6 @@ const App: React.FC = () => {
      if (pos !== -1) {
        textarea.focus();
        textarea.setSelectionRange(pos, pos + findText.length);
-       // Simple scroll adjustment
        const lineHeight = 20;
        const lines = content.substring(0, pos).split('\n').length;
        textarea.scrollTop = lines * lineHeight - textarea.clientHeight / 2;
@@ -319,7 +371,6 @@ const App: React.FC = () => {
     if (selected === findText) {
        const newContent = textarea.value.substring(0, start) + replaceText + textarea.value.substring(end);
        handleContentInput(newContent);
-       // Move to next match
        setTimeout(handleFindNext, 0);
     } else {
        handleFindNext();
@@ -395,10 +446,7 @@ const App: React.FC = () => {
   const insertSyntax = (prefix: string, suffix: string = '') => {
     if (!editorRef.current) return;
     const textarea = editorRef.current;
-    
-    // Save scroll position
     const scrollTop = textarea.scrollTop;
-    
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const text = textarea.value;
@@ -414,13 +462,12 @@ const App: React.FC = () => {
     });
     setHistoryPtr(prev => prev + 1);
     
-    // Restore cursor and scroll position
     setTimeout(() => {
       if (!editorRef.current) return;
       editorRef.current.focus();
       const newCursorPos = start + prefix.length + selection.length + suffix.length;
       editorRef.current.setSelectionRange(start + prefix.length, newCursorPos);
-      editorRef.current.scrollTop = scrollTop; // Restore scroll
+      editorRef.current.scrollTop = scrollTop;
     }, 0);
   };
 
@@ -429,13 +476,11 @@ const App: React.FC = () => {
     if (url) {
       if (!editorRef.current) return;
       const textarea = editorRef.current;
-      const scrollTop = textarea.scrollTop; // Save scroll
-      
+      const scrollTop = textarea.scrollTop;
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const selection = textarea.value.substring(start, end);
       const linkText = selection || prompt("请输入链接文本:", "链接") || "链接";
-      
       const markdownLink = `[${linkText}](${url})`;
       const newText = textarea.value.substring(0, start) + markdownLink + textarea.value.substring(end);
       handleContentInput(newText);
@@ -444,7 +489,7 @@ const App: React.FC = () => {
         if (editorRef.current) {
           editorRef.current.focus();
           editorRef.current.setSelectionRange(start + markdownLink.length, start + markdownLink.length);
-          editorRef.current.scrollTop = scrollTop; // Restore scroll
+          editorRef.current.scrollTop = scrollTop;
         }
       }, 0);
     }
@@ -555,6 +600,11 @@ const App: React.FC = () => {
 
   const isDark = theme === 'dark';
 
+  // Calculate Styles for Split View
+  const sidebarStyle = { width: sidebarOpen ? (window.innerWidth < 768 ? '18rem' : `${sidebarWidth}px`) : '0px' };
+  const editorStyle = viewMode === 'split' ? { width: `${editorWidthPercent}%` } : { width: '100%' };
+  const previewStyle = viewMode === 'split' ? { width: `${100 - editorWidthPercent}%` } : { width: '100%' };
+
   return (
     <div className={`h-[100dvh] w-full flex flex-col overflow-hidden transition-colors duration-300 ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-gray-50 text-slate-900'}`}>
       
@@ -568,28 +618,21 @@ const App: React.FC = () => {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-md transition ${isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-black/5 text-gray-600'}`}><Menu size={20} /></button>
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
-            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.2</span></h1>
+            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.2.1</span></h1>
           </div>
         </div>
-
-        {/* Desktop View Toggle */}
         <div className={`hidden sm:flex rounded-lg p-1 mx-2 ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
           <button onClick={() => setViewMode('editor')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'editor' ? 'bg-white dark:bg-slate-600 shadow-sm text-indigo-600 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>编辑</button>
           <button onClick={() => setViewMode('split')} className={`hidden md:block px-3 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'split' ? 'bg-white dark:bg-slate-600 shadow-sm text-indigo-600 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>分屏</button>
           <button onClick={() => setViewMode('preview')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${viewMode === 'preview' ? 'bg-white dark:bg-slate-600 shadow-sm text-indigo-600 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'}`}>预览</button>
         </div>
-
         <div className="flex items-center space-x-1 sm:space-x-2 relative">
           <button onClick={() => setViewMode(v => v === 'editor' ? 'preview' : 'editor')} className={`sm:hidden p-2 rounded-full transition ${viewMode === 'preview' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-500'}`}>{viewMode === 'editor' ? <BookOpen size={20} /> : <Edit3 size={20} />}</button>
           <button onClick={() => setShowHelpModal(true)} className={`p-2 rounded-full transition ${isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-black/5 text-gray-500'}`}><HelpCircle size={20} /></button>
           <button onClick={() => setShowSettingsModal(true)} className={`p-2 rounded-full transition ${isDark ? 'hover:bg-white/10 text-slate-400' : 'hover:bg-black/5 text-gray-500'}`}><Settings size={20} /></button>
           <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} className={`p-2 rounded-full transition ${isDark ? 'hover:bg-white/10 text-yellow-400' : 'hover:bg-black/5 text-slate-600'}`}>{isDark ? '🌙' : '☀️'}</button>
-          
-          {/* Export Dropdown */}
           <div className="relative">
-            <button onClick={() => setShowExportMenu(!showExportMenu)} className="flex items-center space-x-1 sm:space-x-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition shadow-sm ring-offset-2 focus:ring-2 ring-indigo-500">
-              <Download size={16} /><span className="hidden sm:inline">导出</span>
-            </button>
+            <button onClick={() => setShowExportMenu(!showExportMenu)} className="flex items-center space-x-1 sm:space-x-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition shadow-sm ring-offset-2 focus:ring-2 ring-indigo-500"><Download size={16} /><span className="hidden sm:inline">导出</span></button>
             {showExportMenu && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)}></div>
@@ -608,9 +651,8 @@ const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative">
         
         {/* Sidebar */}
-        <div className={`fixed inset-y-0 left-0 z-40 w-72 transform transition-transform duration-300 ease-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:w-64 flex-none border-r ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)]'} ${!sidebarOpen && 'md:hidden'}`}>
-          <div className="flex flex-col h-full bg-white dark:bg-slate-800">
-            <div className="p-3 flex justify-between items-center border-b border-dashed border-gray-200 dark:border-slate-700">
+        <div className={`flex-none flex flex-col h-full bg-white dark:bg-slate-800 border-r ${isDark ? 'border-slate-700' : 'border-gray-200'} ${!sidebarOpen && 'hidden'}`} style={{ width: window.innerWidth >= 768 ? sidebarWidth : '18rem', position: window.innerWidth < 768 ? 'absolute' : 'relative', zIndex: 40 }}>
+          <div className="p-3 flex justify-between items-center border-b border-dashed border-gray-200 dark:border-slate-700">
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">目录</h2>
               <div className="flex space-x-1">
                  <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded hover:bg-indigo-50 text-indigo-600 dark:hover:bg-indigo-900/30 dark:text-indigo-400 transition flex items-center text-xs font-medium"><Upload size={14} className="mr-1"/>导入</button>
@@ -626,28 +668,29 @@ const App: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div onClick={() => setShowSettingsModal(true)} className={`p-4 border-t cursor-pointer transition-colors ${isDark ? 'border-slate-700 bg-slate-800 hover:bg-slate-700' : 'border-gray-100 bg-gray-50 hover:bg-gray-100'}`}>
+            <div onClick={() => setShowSettingsModal(true)} className={`p-4 border-t cursor-pointer transition-colors ${isDark ? 'border-slate-700 bg-slate-800 hover:bg-slate-700' : 'border-gray-100 bg-gray-100 hover:bg-gray-100'}`}>
                <div className="flex items-center space-x-3">
                   <div className={`w-10 h-14 shadow-sm flex-none bg-white dark:bg-slate-700 border dark:border-slate-600 flex items-center justify-center overflow-hidden rounded-sm`}>{metadata.coverData ? <img src={metadata.coverData} className="w-full h-full object-cover"/> : <BookOpen size={16} className="text-gray-300"/>}</div>
                   <div className="flex-1 min-w-0"><div className="text-sm font-bold truncate text-gray-800 dark:text-gray-200">{metadata.title || '无标题'}</div><div className="text-xs text-gray-500 truncate">{metadata.author || '未设置作者'}</div></div>
                </div>
                <div className="mt-3 flex justify-between text-[10px] text-gray-400 font-mono"><span>本章: {wordCounts.current}</span><span>全书: {wordCounts.total}</span></div>
             </div>
-          </div>
         </div>
+
+        {/* Sidebar Resizer */}
+        {sidebarOpen && window.innerWidth >= 768 && <Resizer onMouseDown={startResizingSidebar} />}
         
-        {sidebarOpen && <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-35 md:hidden" onClick={() => setSidebarOpen(false)} />}
+        {sidebarOpen && window.innerWidth < 768 && <div className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-35 md:hidden" onClick={() => setSidebarOpen(false)} />}
 
         {/* Editor & Preview Container */}
-        <div className="flex-1 flex overflow-hidden bg-gray-100 dark:bg-black/20 relative">
+        <div className="flex-1 flex overflow-hidden bg-gray-100 dark:bg-black/20 relative" ref={containerRef}>
           {/* Editor */}
-          <div className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 relative ${viewMode === 'preview' ? 'hidden' : 'flex'} ${viewMode === 'split' ? 'w-1/2 border-r dark:border-slate-700' : 'w-full'} bg-white dark:bg-slate-900`}>
+          <div className={`flex flex-col h-full overflow-hidden transition-all duration-0 relative ${viewMode === 'preview' ? 'hidden' : 'flex'} bg-white dark:bg-slate-900`} style={editorStyle}>
             <div className={`h-12 flex-none flex items-center justify-between px-2 sm:px-4 border-b space-x-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
                <div className="flex items-center flex-1 overflow-x-auto no-scrollbar space-x-1 pr-2">
                   <button onClick={handleUndo} disabled={historyPtr <= 0} className={`p-1.5 rounded transition ${historyPtr > 0 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="撤销 (Ctrl+Z)"><Undo size={16}/></button>
                   <button onClick={handleRedo} disabled={historyPtr >= history.length - 1} className={`p-1.5 rounded transition ${historyPtr < history.length - 1 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="重做 (Ctrl+Y)"><Redo size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
-                  
                   <button onClick={() => insertSyntax('**', '**')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="加粗 (Ctrl+B)"><Bold size={16}/></button>
                   <button onClick={() => insertSyntax('*', '*')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="斜体 (Ctrl+I)"><Italic size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
@@ -657,7 +700,7 @@ const App: React.FC = () => {
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
                   <button onClick={() => insertSyntax('- ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><List size={16}/></button>
                   <button onClick={() => insertSyntax('> ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Quote size={16}/></button>
-                  <button onClick={() => insertSyntax('\n---\n')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Minus size={16}/></button>
+                  <button onClick={() => insertSyntax('\n---\n')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="分割线"><Minus size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
                   <button onClick={handleInsertLink} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接 (Ctrl+K)"><Link size={16}/></button>
                   <button onClick={handleInsertImage} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><ImageIcon size={16}/></button>
@@ -694,6 +737,9 @@ const App: React.FC = () => {
             <div className={`flex-none px-4 sm:px-6 pt-6 pb-2 ${isDark ? 'bg-slate-900' : 'bg-white'}`}><input type="text" value={activeChapter.title} onChange={(e) => handleUpdateTitle(e.target.value)} className={`w-full text-2xl font-bold bg-transparent border-none focus:ring-0 placeholder-gray-300 dark:placeholder-slate-700 p-0 ${isDark ? 'text-white' : 'text-gray-900'}`} placeholder="输入章节标题..." /></div>
             <textarea ref={editorRef} className={`flex-1 w-full px-4 sm:px-6 py-4 resize-none outline-none font-mono text-base sm:text-sm leading-7 custom-scrollbar ${isDark ? 'bg-slate-900 text-slate-300 selection:bg-indigo-500/30' : 'bg-white text-slate-700 selection:bg-indigo-100'}`} value={activeChapter.content} onChange={(e) => handleContentInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="在此处开始您的创作..." spellCheck={false} />
           </div>
+          
+          {/* Editor/Preview Resizer */}
+          {viewMode === 'split' && window.innerWidth >= 768 && <Resizer onMouseDown={startResizingEditor} />}
 
           {/* Memo Panel */}
           <div className={`absolute top-0 right-0 bottom-0 z-40 w-72 transform transition-transform duration-300 border-l shadow-xl ${memoOpen ? 'translate-x-0' : 'translate-x-full'} ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-yellow-50 border-yellow-200'}`}>
@@ -704,7 +750,7 @@ const App: React.FC = () => {
           </div>
 
           {/* Preview */}
-          <div className={`flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 shadow-inner ${viewMode === 'editor' ? 'hidden' : 'flex'} ${viewMode === 'split' ? 'w-1/2' : 'w-full'} bg-[#f8f5f1] dark:bg-[#151515]`}>
+          <div className={`flex-col h-full overflow-hidden transition-all duration-0 shadow-inner ${viewMode === 'editor' ? 'hidden' : 'flex'} bg-[#f8f5f1] dark:bg-[#151515] ${viewMode === 'split' ? 'border-l dark:border-slate-700' : ''}`} style={previewStyle}>
              <div className={`h-12 flex-none flex items-center justify-between px-4 border-b ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-[#f0ede9] border-[#e5e2de]'}`}>
                <div className="flex items-center space-x-1">
                  <button onClick={() => setPreviewConfig({...previewConfig, viewMode: 'mobile'})} className={`p-1.5 rounded ${previewConfig.viewMode === 'mobile' ? (isDark ? 'bg-white/10' : 'bg-black/5') : ''}`} title="手机视图"><Smartphone size={16} className="text-gray-500"/></button>
@@ -744,7 +790,8 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* --- MODALS (Snapshot, Settings, Help) --- */}
+      {/* --- MODALS --- */}
+      {/* ... (Modals remain unchanged from previous version) ... */}
       {showSnapshotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
@@ -780,7 +827,6 @@ const App: React.FC = () => {
                <div className="grid grid-cols-2 gap-5">
                  <div className="col-span-2 sm:col-span-1 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">书名</label><input type="text" value={metadata.title} onChange={(e) => setMetadata({...metadata, title: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
                  <div className="col-span-2 sm:col-span-1 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">作者</label><input type="text" value={metadata.author} onChange={(e) => setMetadata({...metadata, author: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
-                 {/* ... Other fields ... */}
                  <div className="col-span-2 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">出版社</label><input type="text" value={metadata.publisher || ''} onChange={(e) => setMetadata({...metadata, publisher: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
                  <div className="col-span-2 sm:col-span-1 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">ISBN</label><input type="text" value={metadata.isbn || ''} onChange={(e) => setMetadata({...metadata, isbn: e.target.value})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
                  <div className="col-span-2 space-y-1.5"><label className="block text-xs font-bold text-gray-500 uppercase">标签 (逗号分隔)</label><input type="text" value={metadata.tags?.join(', ') || ''} onChange={(e) => setMetadata({...metadata, tags: e.target.value.split(',').map(t => t.trim())})} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition ${isDark ? 'bg-slate-900 border-slate-600' : 'bg-white border-gray-300'}`} /></div>
@@ -809,7 +855,7 @@ const App: React.FC = () => {
              <div className="p-8 overflow-y-auto max-h-[60vh] custom-scrollbar">
                <div className={`prose prose-sm ${isDark ? 'prose-invert' : 'prose-indigo'}`}><ReactMarkdown>{HELP_CONTENT}</ReactMarkdown></div>
              </div>
-             <div className={`p-4 border-t text-center text-xs text-gray-400 ${isDark ? 'border-slate-700' : 'bg-gray-50'}`}>ZenPub v2.2 &copy; 2024</div>
+             <div className={`p-4 border-t text-center text-xs text-gray-400 ${isDark ? 'border-slate-700' : 'bg-gray-50'}`}>ZenPub v2.2.1 &copy; 2024</div>
           </div>
         </div>
       )}
