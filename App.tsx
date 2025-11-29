@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+// ... existing imports ...
 import { 
   Menu, BookOpen, Settings, Download, Plus, Trash2, 
   ChevronLeft, ChevronRight, PenTool, Edit3, Save, 
@@ -14,8 +15,7 @@ import remarkGfm from 'remark-gfm';
 import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig } from './types';
 import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './services/epubService';
 
-// --- Constants & Defaults ---
-
+// ... Constants ...
 const DEFAULT_CHAPTER: Chapter = {
   id: '1',
   title: '第一章：启程',
@@ -69,13 +69,13 @@ const HELP_CONTENT = `
 - 脚注: 这是一个脚注[^1]
   \`[^1]: 脚注解释内容\`
 
-## v2.2.1 新特性
-- **可调节分屏**: 拖动侧边栏或预览区的边框，自由调整宽度。
-- **查找替换**: 支持当前章节内的查找与替换。
-- **快捷键增强**: 新增多项编辑快捷键。
+## v2.2.2 新特性
+- **兼容性修复**: 增强了导出文件在 Kindle/Apple Books 等阅读器上的兼容性。
+- **智能导出**: 修复了导出文件可能出现章节标题重复的问题。
 `;
 
-// --- Components ---
+// ... rest of the App.tsx logic remains same ...
+// (I will output the full file content to ensure consistency)
 
 const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () => void }> = ({ message, type, onClose }) => (
   <div className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 z-[70] animate-fade-in-up ${type === 'success' ? 'bg-green-600 text-white' : 'bg-red-500 text-white'}`}>
@@ -87,10 +87,29 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () 
 // Resizer Component
 const Resizer: React.FC<{ onMouseDown: (e: React.MouseEvent) => void, vertical?: boolean }> = ({ onMouseDown, vertical = true }) => (
   <div 
-    className={`z-20 flex-none hover:bg-indigo-500/50 transition-colors select-none ${vertical ? 'w-1 cursor-col-resize hover:w-1.5 -mr-0.5 -ml-0.5' : 'h-1 cursor-row-resize hover:h-1.5 -mt-0.5 -mb-0.5'}`} 
+    className={`z-20 flex-none hover:bg-indigo-500/50 transition-colors select-none bg-gray-200 dark:bg-slate-700 ${vertical ? 'w-1 cursor-col-resize hover:w-1.5 -mr-0.5 -ml-0.5' : 'h-1 cursor-row-resize hover:h-1.5 -mt-0.5 -mb-0.5'}`} 
     onMouseDown={onMouseDown}
   />
 );
+
+// Helper component for highlighting matching text
+const HighlightedText: React.FC<{ text: string; highlight: string }> = ({ text, highlight }) => {
+  if (!highlight.trim()) {
+    return <>{text}</>;
+  }
+  const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, i) => 
+        part.toLowerCase() === highlight.toLowerCase() ? (
+          <span key={i} className="bg-yellow-200 dark:bg-yellow-900/60 text-indigo-700 dark:text-indigo-300 font-bold rounded-[1px] px-0.5">{part}</span>
+        ) : (
+          part
+        )
+      )}
+    </>
+  );
+};
 
 const App: React.FC = () => {
   // --- State ---
@@ -114,12 +133,15 @@ const App: React.FC = () => {
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
-  // Search & Replace State
+  // Search & Replace State (Editor Content)
   const [showSearchPanel, setShowSearchPanel] = useState(false);
   const [findText, setFindText] = useState('');
   const [replaceText, setReplaceText] = useState('');
   const [matchCount, setMatchCount] = useState(0);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+
+  // Chapter Search State (Sidebar)
+  const [chapterSearchQuery, setChapterSearchQuery] = useState('');
 
   // Undo/Redo
   const [history, setHistory] = useState<string[]>([]);
@@ -143,6 +165,12 @@ const App: React.FC = () => {
   // --- Derived State ---
   const activeChapter = chapters.find(c => c.id === activeChapterId) || chapters[0];
   
+  // Filtered Chapters for Sidebar
+  const filteredChapters = useMemo(() => {
+    if (!chapterSearchQuery.trim()) return chapters;
+    return chapters.filter(c => c.title.toLowerCase().includes(chapterSearchQuery.toLowerCase()));
+  }, [chapters, chapterSearchQuery]);
+
   // Word Count
   const wordCounts = useMemo(() => {
     const currentText = activeChapter.content.replace(/[#*>\-`\[\]\(\)\n]/g, '');
@@ -547,6 +575,7 @@ const App: React.FC = () => {
     };
     setChapters([...chapters, newChapter]);
     setActiveChapterId(newId);
+    setChapterSearchQuery(''); // Clear search to show new chapter
     if (window.innerWidth < 768) setSidebarOpen(false);
     showToast("章节已添加");
   };
@@ -634,7 +663,7 @@ const App: React.FC = () => {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-md transition ${isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-black/5 text-gray-600'}`}><Menu size={20} /></button>
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
-            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.2.1</span></h1>
+            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.2.2</span></h1>
           </div>
         </div>
         <div className={`hidden sm:flex rounded-lg p-1 mx-2 ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
@@ -667,7 +696,7 @@ const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative">
         
         {/* Sidebar */}
-        <div className={`flex-none flex flex-col h-full bg-white dark:bg-slate-800 border-r ${isDark ? 'border-slate-700' : 'border-gray-200'} ${!sidebarOpen && 'hidden'}`} style={{ width: window.innerWidth >= 768 ? sidebarWidth : '18rem', position: window.innerWidth < 768 ? 'absolute' : 'relative', zIndex: 40 }}>
+        <div className={`flex-none flex flex-col h-full bg-white dark:bg-slate-900 border-r ${isDark ? 'border-slate-700' : 'border-gray-200'} ${!sidebarOpen && 'hidden'}`} style={{ width: window.innerWidth >= 768 ? sidebarWidth : '18rem', position: window.innerWidth < 768 ? 'absolute' : 'relative', zIndex: 40 }}>
           <div className="p-3 flex justify-between items-center border-b border-dashed border-gray-200 dark:border-slate-700">
               <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider">目录</h2>
               <div className="flex space-x-1">
@@ -675,11 +704,36 @@ const App: React.FC = () => {
                  <button onClick={addChapter} className="p-1.5 rounded hover:bg-indigo-50 text-indigo-600 dark:hover:bg-indigo-900/30 dark:text-indigo-400 transition"><Plus size={16} /></button>
               </div>
             </div>
+            
+            {/* Search Bar */}
+            <div className={`px-3 pb-3 border-b border-dashed ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+               <div className="relative">
+                  <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14}/>
+                  <input 
+                     type="text" 
+                     value={chapterSearchQuery}
+                     onChange={(e) => setChapterSearchQuery(e.target.value)}
+                     placeholder="搜索章节..."
+                     className={`w-full pl-8 pr-7 py-1.5 text-xs rounded-md border outline-none transition-colors ${isDark ? 'bg-slate-800 border-slate-700 focus:border-indigo-500 text-gray-200 placeholder-gray-500' : 'bg-gray-50 border-gray-200 focus:border-indigo-500 text-gray-700'}`}
+                  />
+                  {chapterSearchQuery && (
+                    <button onClick={() => setChapterSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <X size={12} />
+                    </button>
+                  )}
+               </div>
+            </div>
+
             <div className="flex-1 overflow-y-auto py-2">
-              {chapters.map((chapter, idx) => (
+              {filteredChapters.length === 0 && (
+                 <div className="text-center text-gray-400 text-xs py-4">未找到匹配章节</div>
+              )}
+              {filteredChapters.map((chapter, idx) => (
                 <div key={chapter.id} onClick={() => { setActiveChapterId(chapter.id); if (window.innerWidth < 768) setSidebarOpen(false); }} className={`group relative flex items-center px-4 py-3 cursor-pointer text-sm border-l-4 transition-colors ${activeChapterId === chapter.id ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100 font-medium' : 'border-transparent hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'}`}>
                   <span className="w-6 text-xs text-gray-400 dark:text-gray-600 font-mono mr-2">{idx + 1}.</span>
-                  <span className="truncate flex-1 py-1">{chapter.title}</span>
+                  <span className="truncate flex-1 py-1">
+                    <HighlightedText text={chapter.title} highlight={chapterSearchQuery} />
+                  </span>
                   <button onClick={(e) => deleteChapter(chapter.id, e)} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all absolute right-2"><Trash2 size={14} /></button>
                 </div>
               ))}
@@ -714,8 +768,8 @@ const App: React.FC = () => {
                   <button onClick={() => insertSyntax('## ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题2 (Ctrl+2)"><Heading2 size={16}/></button>
                   <button onClick={() => insertSyntax('### ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题3 (Ctrl+3)"><Heading3 size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
-                  <button onClick={() => insertSyntax('- ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><List size={16}/></button>
-                  <button onClick={() => insertSyntax('> ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><Quote size={16}/></button>
+                  <button onClick={() => insertSyntax('- ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="列表"><List size={16}/></button>
+                  <button onClick={() => insertSyntax('> ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="引用"><Quote size={16}/></button>
                   <button onClick={() => insertSyntax('\n---\n')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="分割线"><Minus size={16}/></button>
                   <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-none"></div>
                   <button onClick={handleInsertLink} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接 (Ctrl+K)"><Link size={16}/></button>
@@ -733,19 +787,19 @@ const App: React.FC = () => {
               <div className={`flex-none px-4 py-2 border-b flex items-center space-x-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
                  <div className="flex items-center border rounded px-2 py-1 bg-white dark:bg-slate-700 dark:border-slate-600">
                     <SearchIcon size={14} className="text-gray-400 mr-2"/>
-                    <input type="text" value={findText} onChange={(e) => setFindText(e.target.value)} placeholder="查找..." className="outline-none bg-transparent text-sm w-32"/>
+                    <input type="text" value={findText} onChange={(e) => setFindText(e.target.value)} placeholder="查找..." className="outline-none bg-transparent text-sm w-32 text-gray-800 dark:text-white"/>
                  </div>
                  <div className="flex items-center border rounded px-2 py-1 bg-white dark:bg-slate-700 dark:border-slate-600">
                     <Replace size={14} className="text-gray-400 mr-2"/>
-                    <input type="text" value={replaceText} onChange={(e) => setReplaceText(e.target.value)} placeholder="替换为..." className="outline-none bg-transparent text-sm w-32"/>
+                    <input type="text" value={replaceText} onChange={(e) => setReplaceText(e.target.value)} placeholder="替换为..." className="outline-none bg-transparent text-sm w-32 text-gray-800 dark:text-white"/>
                  </div>
                  <div className="flex items-center space-x-1">
                     <button onClick={handleFindPrev} className="p-1 hover:bg-gray-200 dark:hover:bg-slate-600 rounded"><ArrowUp size={14}/></button>
                     <button onClick={handleFindNext} className="p-1 hover:bg-gray-200 dark:hover:bg-slate-600 rounded"><ArrowDown size={14}/></button>
                  </div>
                  <span className="text-xs text-gray-400 w-16 text-center">{matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '0/0'}</span>
-                 <button onClick={handleReplace} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600">替换</button>
-                 <button onClick={handleReplaceAll} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600">全部替换</button>
+                 <button onClick={handleReplace} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white">替换</button>
+                 <button onClick={handleReplaceAll} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white">全部替换</button>
                  <button onClick={() => setShowSearchPanel(false)} className="ml-auto text-gray-400 hover:text-red-500"><XCircle size={16}/></button>
               </div>
             )}
@@ -807,7 +861,7 @@ const App: React.FC = () => {
       </div>
 
       {/* --- MODALS --- */}
-      {/* ... (Modals remain unchanged from previous version) ... */}
+      {/* ... (Keep existing modals) ... */}
       {showSnapshotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className={`w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
@@ -861,6 +915,7 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Help Modal */}
       {showHelpModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className={`w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden ${isDark ? 'bg-slate-800 border border-slate-700' : 'bg-white'}`}>
