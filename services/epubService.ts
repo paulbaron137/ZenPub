@@ -20,6 +20,41 @@ const escapeXml = (unsafe: string | undefined) => {
   });
 };
 
+// Helper to make HTML XML-compliant for EPUB (XHTML)
+// This fixes "Opening and ending tag mismatch" errors for tags like <hr>, <img>, <br>
+const makeXhtmlCompatible = (html: string): string => {
+  return html
+    .replace(/<hr>/g, '<hr />')
+    .replace(/<br>/g, '<br />')
+    .replace(/<img([^>]*[^/])>/g, '<img$1 />');
+};
+
+// Helper to remove duplicate title at start of content if it exists
+const getContentWithTitle = (title: string, content: string, isHtml = false): string => {
+  const trimmedContent = content.trim();
+  const titlePattern = new RegExp(`^#\\s*${title.trim()}`, 'i');
+  
+  // If content already starts with the title (Markdown style), return as is
+  if (trimmedContent.match(titlePattern)) {
+    return content;
+  }
+  
+  // For HTML output (used in EPUB/PDF), check if H1 matches title
+  if (isHtml) {
+      // Simple check: does it start with <h1>Title</h1>?
+      // This is a bit loose but covers standard marked output
+      const h1Pattern = new RegExp(`^<h1[^>]*>\\s*${title.trim()}\\s*<\/h1>`, 'i');
+      if (trimmedContent.match(h1Pattern)) {
+          return content;
+      }
+      return `<h1>${escapeXml(title)}</h1>\n${content}`;
+  }
+
+  // Default markdown prepend
+  return `# ${title}\n\n${content}`;
+};
+
+
 // Internal helper to trigger download without external dependencies
 const downloadBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
@@ -53,8 +88,8 @@ export const exportToEpub = async (bookMeta: BookMetadata, chapters: Chapter[]) 
 
   // Handle Cover Image
   let coverFileName = '';
+  let coverId = 'cover-image'; 
   if (bookMeta.coverData && bookMeta.coverMimeType) {
-    // Remove Base64 prefix (e.g., "data:image/jpeg;base64,")
     const parts = bookMeta.coverData.split(',');
     if (parts.length === 2) {
       const base64Data = parts[1];
@@ -68,8 +103,21 @@ export const exportToEpub = async (bookMeta: BookMetadata, chapters: Chapter[]) 
   const chapterFiles: { id: string, href: string, title: string }[] = [];
   
   chapters.forEach((chapter, index) => {
-    // marked.parse returns string | Promise<string>. In standard usage it is synchronous string.
-    const htmlContent = marked.parse(chapter.content) as string;
+    let htmlContent = marked.parse(chapter.content) as string;
+    
+    // Ensure XHTML compatibility for self-closing tags
+    htmlContent = makeXhtmlCompatible(htmlContent);
+    
+    // Check if the first element is already the title to avoid duplication
+    // The getContentWithTitle helper logic is slightly adapted here for HTML structure
+    // We check if the generated HTML starts with an H1 that matches the title
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    const firstChild = tempDiv.firstElementChild;
+    const hasTitle = firstChild && firstChild.tagName === 'H1' && firstChild.textContent?.trim() === chapter.title.trim();
+    
+    const bodyContent = hasTitle ? htmlContent : `<h1>${escapeXml(chapter.title)}</h1>\n${htmlContent}`;
+
     const fileName = `chapter_${index + 1}.xhtml`;
     const fileId = `chap${index + 1}`;
     
@@ -81,10 +129,7 @@ export const exportToEpub = async (bookMeta: BookMetadata, chapters: Chapter[]) 
     <link rel="stylesheet" type="text/css" href="style.css" />
 </head>
 <body>
-    <h1>${escapeXml(chapter.title)}</h1>
-    <div class="content">
-        ${htmlContent}
-    </div>
+    ${bodyContent}
 </body>
 </html>`;
 
@@ -92,7 +137,7 @@ export const exportToEpub = async (bookMeta: BookMetadata, chapters: Chapter[]) 
     chapterFiles.push({ id: fileId, href: fileName, title: chapter.title });
   });
 
-  // 4. Style.css - Optimized for Chinese Typography
+  // 4. Style.css - Optimized
   oebps.file('style.css', `
     @font-face {
       font-family: "Source Han Serif SC";
@@ -116,53 +161,33 @@ export const exportToEpub = async (bookMeta: BookMetadata, chapters: Chapter[]) 
       line-height: 1.4;
     }
     h1 { font-size: 1.6em; text-align: center; margin-bottom: 1.5em; border-bottom: 1px solid #eee; padding-bottom: 0.5em; }
-    h2 { font-size: 1.4em; }
-    h3 { font-size: 1.2em; }
-    
-    p { 
-      margin-bottom: 1em; 
-      text-indent: 2em; /* Chinese paragraph indentation */
-    }
-    
+    p { margin-bottom: 1em; text-indent: 2em; }
     code { font-family: monospace; background: #f5f5f7; padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
-    pre { background: #f5f5f7; padding: 1em; overflow-x: auto; border-radius: 4px; font-size: 0.9em; margin: 1em 0; }
-    blockquote { 
-      border-left: 4px solid #ddd; 
-      padding-left: 1em; 
-      margin: 1em 0; 
-      color: #666; 
-      font-style: italic;
-    }
     img { max-width: 100%; height: auto; display: block; margin: 1em auto; }
-    ul, ol { margin: 1em 0 1em 2em; padding: 0; }
-    li { margin-bottom: 0.5em; }
-    sup { font-size: 0.75em; vertical-align: super; }
+    hr { border: 0; border-top: 1px solid #eee; margin: 2em 0; }
   `);
 
   // 5. content.opf
   let manifestItems = '';
-  
-  // Add CSS
   manifestItems += `<item id="style" href="style.css" media-type="text/css"/>\n`;
-  // Add NCX
   manifestItems += `<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n`;
   
-  // Add Cover if exists
   let coverMeta = '';
   if (coverFileName) {
-    manifestItems += `<item id="cover-image" href="images/${coverFileName}" media-type="${bookMeta.coverMimeType}" properties="cover-image" />\n`;
-    coverMeta = `<meta name="cover" content="cover-image" />`;
+    // EPUB 3 property and standard item
+    manifestItems += `<item id="${coverId}" href="images/${coverFileName}" media-type="${bookMeta.coverMimeType}" properties="cover-image" />\n`;
+    // EPUB 2 compatibility meta
+    coverMeta = `<meta name="cover" content="${coverId}" />`;
   }
 
-  // Add Chapters
   manifestItems += chapterFiles.map(c => `<item id="${c.id}" href="${c.href}" media-type="application/xhtml+xml" />`).join('\n');
   
   const spineItems = chapterFiles.map(c => `<itemref idref="${c.id}" />`).join('\n');
 
-  // Handle optional metadata
   const isbnMeta = bookMeta.isbn ? `<dc:identifier id="isbn">urn:isbn:${escapeXml(bookMeta.isbn)}</dc:identifier>` : '';
   const tagsMeta = bookMeta.tags && bookMeta.tags.length > 0 ? bookMeta.tags.map(t => `<dc:subject>${escapeXml(t)}</dc:subject>`).join('\n') : '';
 
+  // NOTE: Added <meta name="cover"> for EPUB 2 compatibility which many readers use for thumbnail
   const contentOpf = `<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="3.0">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
@@ -211,26 +236,24 @@ export const exportToEpub = async (bookMeta: BookMetadata, chapters: Chapter[]) 
 
   oebps.file('toc.ncx', tocNcx);
 
-  // Generate Blob
   const content = await zip.generateAsync({ type: 'blob' });
-  
-  // Use custom helper
   downloadBlob(content, `${bookMeta.title.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_')}.epub`);
 };
 
 export const exportToMarkdown = async (bookMeta: BookMetadata, chapters: Chapter[]) => {
   const zip = new JSZip();
   
-  // Metadata file
   zip.file('metadata.json', JSON.stringify(bookMeta, null, 2));
   
-  // Combined file
   let combinedContent = `# ${bookMeta.title}\n\nAuthor: ${bookMeta.author}\n\n${bookMeta.description}\n\n---\n\n`;
   
   chapters.forEach((chapter, index) => {
+    // Use the helper to ensure title isn't duplicated if content already starts with it
+    const finalContent = getContentWithTitle(chapter.title, chapter.content, false);
     const fileName = `chapter_${(index + 1).toString().padStart(2, '0')}_${chapter.title.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_')}.md`;
-    zip.file(fileName, chapter.content);
-    combinedContent += `${chapter.content}\n\n---\n\n`;
+    
+    zip.file(fileName, finalContent);
+    combinedContent += `${finalContent}\n\n---\n\n`;
   });
   
   zip.file('full_book.md', combinedContent);
@@ -240,27 +263,33 @@ export const exportToMarkdown = async (bookMeta: BookMetadata, chapters: Chapter
 };
 
 export const exportToPdf = async (bookMeta: BookMetadata, chapters: Chapter[]) => {
-  // Create a hidden container
   const container = document.createElement('div');
   container.style.position = 'absolute';
   container.style.top = '-9999px';
   container.style.left = '-9999px';
-  container.style.width = '210mm'; // A4 width
+  container.style.width = '210mm';
   container.className = 'pdf-export-container';
   
-  // Cover Page
   let html = `<div style="text-align:center; padding-top: 100px; page-break-after: always;">
     <h1 style="font-size: 36px; margin-bottom: 20px;">${bookMeta.title}</h1>
     <h3 style="font-size: 24px; color: #666;">${bookMeta.author}</h3>
     ${bookMeta.publisher ? `<p style="margin-top: 50px;">${bookMeta.publisher}</p>` : ''}
   </div>`;
 
-  // Chapters
   chapters.forEach(chapter => {
-    const contentHtml = marked.parse(chapter.content);
+    // Logic to check duplication
+    const rawHtml = marked.parse(chapter.content) as string;
+    
+    // Temporarily check content for title match
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = rawHtml;
+    const firstChild = tempDiv.firstElementChild;
+    const hasTitle = firstChild && (firstChild.tagName === 'H1' || firstChild.tagName === 'H2') && firstChild.textContent?.trim() === chapter.title.trim();
+    
+    const bodyContent = hasTitle ? rawHtml : `<h2 style="border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 20px;">${chapter.title}</h2>\n${rawHtml}`;
+
     html += `<div style="page-break-after: always; padding: 20px;">
-      <h2 style="border-bottom: 1px solid #ccc; padding-bottom: 10px; margin-bottom: 20px;">${chapter.title}</h2>
-      <div class="prose" style="font-family: serif; line-height: 1.6;">${contentHtml}</div>
+      <div class="prose" style="font-family: serif; line-height: 1.6;">${bodyContent}</div>
     </div>`;
   });
 
@@ -290,7 +319,6 @@ export const exportToPdf = async (bookMeta: BookMetadata, chapters: Chapter[]) =
 export const importEpub = async (file: File): Promise<{ metadata: BookMetadata, chapters: Chapter[] }> => {
   const zip = await JSZip.loadAsync(file);
   
-  // 1. Find container.xml to get OPF path
   const containerFile = zip.file("META-INF/container.xml");
   if (!containerFile) throw new Error("Invalid EPUB: container.xml missing");
   const containerXml = await containerFile.async("string");
@@ -301,13 +329,11 @@ export const importEpub = async (file: File): Promise<{ metadata: BookMetadata, 
   const opfPath = rootfile?.getAttribute("full-path");
   if (!opfPath) throw new Error("Invalid EPUB: OPF path not found");
   
-  // 2. Parse OPF
   const opfFile = zip.file(opfPath);
   if (!opfFile) throw new Error("Invalid EPUB: OPF file missing");
   const opfXml = await opfFile.async("string");
   const opfDoc = parser.parseFromString(opfXml, "application/xml");
   
-  // Extract Metadata
   const metadata: BookMetadata = {
     title: opfDoc.querySelector("title")?.textContent || "Untitled",
     author: opfDoc.querySelector("creator")?.textContent || "Unknown",
@@ -318,7 +344,6 @@ export const importEpub = async (file: File): Promise<{ metadata: BookMetadata, 
     tags: Array.from(opfDoc.querySelectorAll("subject")).map(el => el.textContent || "").filter(Boolean)
   };
 
-  // 3. Parse Manifest & Spine
   const manifestItems: {[key: string]: string} = {};
   opfDoc.querySelectorAll("manifest > item").forEach(item => {
     const id = item.getAttribute("id");
@@ -332,13 +357,12 @@ export const importEpub = async (file: File): Promise<{ metadata: BookMetadata, 
     if (idref) spineRefs.push(idref);
   });
 
-  // 4. Load Chapters
   const turndownService = new TurndownService({
     headingStyle: 'atx',
     codeBlockStyle: 'fenced'
   });
   
-  const opfDir = opfPath.split('/').slice(0, -1).join('/'); // Path context
+  const opfDir = opfPath.split('/').slice(0, -1).join('/'); 
   
   const chapters: Chapter[] = [];
   
@@ -347,7 +371,6 @@ export const importEpub = async (file: File): Promise<{ metadata: BookMetadata, 
     const relativeHref = manifestItems[id];
     if (!relativeHref) continue;
     
-    // Resolve path relative to OPF
     const fullPath = opfDir ? `${opfDir}/${relativeHref}` : relativeHref;
     
     const chapFile = zip.file(fullPath);
@@ -355,10 +378,13 @@ export const importEpub = async (file: File): Promise<{ metadata: BookMetadata, 
       const htmlContent = await chapFile.async("string");
       const doc = parser.parseFromString(htmlContent, "application/xhtml+xml");
       
-      // Extract title from h1/h2 or fallback
-      let title = doc.querySelector("h1, h2")?.textContent || `Chapter ${i + 1}`;
+      const heading = doc.querySelector("h1, h2");
+      let title = heading?.textContent || `Chapter ${i + 1}`;
+
+      if (heading && heading.textContent && title.trim() === heading.textContent.trim()) {
+         heading.remove();
+      }
       
-      // Convert body to Markdown
       const markdown = turndownService.turndown(doc.body.innerHTML);
       
       chapters.push({
