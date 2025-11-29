@@ -48,6 +48,9 @@ body {
   font-weight: bold;
   padding: 0 2px;
 }
+.dark .footnote-ref {
+  color: #818cf8;
+}
 
 /* Preview Mode Specifics */
 .preview-container-wrapper {
@@ -60,11 +63,11 @@ body {
 .preview-a4 {
   width: 210mm;
   min-height: 297mm;
-  /* margin: 20px auto; Removed to let flex handle centering */
   padding: 25mm;
   box-shadow: 0 0 15px rgba(0,0,0,0.1);
   background: white;
-  flex-shrink: 0; /* Prevent shrinking */
+  flex-shrink: 0; 
+  color: #1f2937; /* Explicit text color for light mode */
 }
 .dark .preview-a4 {
   background: #1e293b;
@@ -74,14 +77,14 @@ body {
 
 .preview-mobile {
   width: 375px;
-  /* margin: 20px auto; Removed to let flex handle centering */
   border: 8px solid #333;
   border-radius: 24px;
   padding: 20px;
   background: white;
   min-height: 667px;
-  flex-shrink: 0; /* Prevent shrinking */
+  flex-shrink: 0; 
   box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  color: #1f2937;
 }
 .dark .preview-mobile {
   background: #1e293b;
@@ -98,8 +101,69 @@ body {
   box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
   padding: 3rem 1.5rem;
   margin-bottom: 2rem;
+  color: #1f2937;
 }
 .dark .preview-desktop {
   background: #1e293b;
   color: #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5);
+}
+
+/* Prose Overrides for Dark Mode - Comprehensive Fix */
+.dark .prose {
+  color: #e2e8f0;
+}
+.dark .prose h1, .dark .prose h2, .dark .prose h3, .dark .prose h4, .dark .prose strong, .dark .prose b {
+  color: #f8fafc;
+}
+.dark .prose a {
+  color: #818cf8;
+}
+.dark .prose a:hover {
+  color: #a5b4fc;
+}
+.dark .prose blockquote {
+  border-left-color: #475569;
+  color: #94a3b8;
+  background-color: rgba(30, 41, 59, 0.5); /* Slight background for visibility */
+}
+.dark .prose code {
+  color: #e2e8f0;
+  background-color: #334155;
+  padding: 0.1em 0.3em;
+  border-radius: 0.2em;
+}
+.dark .prose pre {
+  background-color: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+}
+.dark .prose pre code {
+  background-color: transparent;
+  color: inherit;
+  padding: 0;
+}
+.dark .prose ul > li::marker, .dark .prose ol > li::marker {
+  color: #94a3b8;
+}
+.dark .prose hr {
+  border-color: #334155;
+}
+.dark .prose thead {
+  color: #f1f5f9;
+  border-bottom-color: #475569;
+}
+.dark .prose tbody tr {
+  border-bottom-color: #334155;
+}
+.dark .prose img {
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+/* Table styles for dark mode */
+.dark .prose table {
+  border-color: #334155;
+}
+.dark .prose th, .dark .prose td {
+  border-color: #334155;
 }
