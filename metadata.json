@@ -1,5 +1,5 @@
 {
-  "name": "ZenPub v2.2.1 - 可调节分屏版",
-  "description": "专业的 Markdown/EPUB 编辑器 v2.2.1。支持自由调节分屏大小，新增查找替换、快捷键增强，支持 EPUB 导入编辑及多格式导出。",
+  "name": "ZenPub v2.2.2 - 兼容性修复版",
+  "description": "专业的 Markdown/EPUB 编辑器 v2.2.2。修复 EPUB 封面兼容性及导出标题重复问题，支持自由分屏与多格式导出。",
   "requestFramePermissions": []
 }
