@@ -1,3 +1,5 @@
+// vite.config.ts
+
 import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -15,10 +17,14 @@ export default defineConfig(({ mode }) => {
         VitePWA({
           registerType: 'autoUpdate',
           workbox: {
-            globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+            globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+            // ✨ 新增或修改此行 ✨
+            // 将文件大小限制从默认的 2 MiB 增加到 10 MiB (10 * 1024 * 1024 字节)
+            maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, 
           },
           includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
           manifest: {
+            // ... (manifest 配置保持不变)
             name: 'ZenPub',
             short_name: 'ZenPub',
             description: 'A powerful markdown publishing tool',
