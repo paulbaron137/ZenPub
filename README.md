@@ -49,7 +49,7 @@
 
 ### 在线体验
 
-`zen-pub-v203-4q7ctb7ch-yimaneilipauls-projects.vercel.app`
+https://zen-pub-v203-4q7ctb7ch-yimaneilipauls-projects.vercel.app/
 
 ### 本地运行
 
