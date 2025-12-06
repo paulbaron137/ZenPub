@@ -14,6 +14,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig } from './types';
 import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './services/epubService';
+import { useAppCache } from './hooks/useAppCache';
 
 // ... Constants ...
 const DEFAULT_CHAPTER: Chapter = {
@@ -161,6 +162,7 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   // --- Derived State ---
   const activeChapter = chapters.find(c => c.id === activeChapterId) || chapters[0];
@@ -645,6 +647,32 @@ const App: React.FC = () => {
 
   const isDark = theme === 'dark';
 
+  // 使用应用缓存Hook
+  const { isRestoring, lastSaveTime, saveAppState, clearCache } = useAppCache({
+    metadata,
+    chapters,
+    activeChapterId,
+    viewMode,
+    sidebarOpen,
+    memoOpen,
+    theme,
+    sidebarWidth,
+    editorWidthPercent,
+    previewConfig,
+    setMetadata,
+    setChapters,
+    setActiveChapterId,
+    setViewMode,
+    setSidebarOpen,
+    setMemoOpen,
+    setTheme,
+    setSidebarWidth,
+    setEditorWidthPercent,
+    setPreviewConfig,
+    editorRef,
+    previewRef
+  });
+
   // Calculate Styles for Split View
   const sidebarStyle = { width: sidebarOpen ? (window.innerWidth < 768 ? '18rem' : `${sidebarWidth}px`) : '0px' };
   const editorStyle = viewMode === 'split' ? { width: `${editorWidthPercent}%` } : { width: '100%' };
@@ -664,6 +692,18 @@ const App: React.FC = () => {
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
             <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.2.2</span></h1>
+            {isRestoring && (
+              <div className="flex items-center ml-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                <span className="text-xs ml-1 text-gray-500 dark:text-gray-400">恢复中...</span>
+              </div>
+            )}
+            {lastSaveTime && !isRestoring && (
+              <div className="flex items-center ml-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                <span className="text-xs ml-1 text-gray-500 dark:text-gray-400">已保存</span>
+              </div>
+            )}
           </div>
         </div>
         <div className={`hidden sm:flex rounded-lg p-1 mx-2 ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
@@ -835,7 +875,7 @@ const App: React.FC = () => {
                <button onClick={() => setViewMode('editor')} className="sm:hidden p-2 text-gray-500 hover:text-red-500 transition"><X size={18} /></button>
              </div>
              
-             <div className="flex-1 overflow-y-auto custom-scrollbar bg-gray-100 dark:bg-black/30">
+             <div ref={previewRef} className="flex-1 overflow-y-auto custom-scrollbar bg-gray-100 dark:bg-black/30">
                <div className="preview-container-wrapper">
                  <div 
                     className={`
@@ -905,7 +945,10 @@ const App: React.FC = () => {
                </div>
             </div>
             <div className={`p-4 border-t ${isDark ? 'border-slate-700 bg-slate-800' : 'bg-gray-50'} flex justify-between items-center`}>
-              <button onClick={handleResetApp} className="text-red-500 text-xs font-bold flex items-center hover:underline"><RotateCcw size={14} className="mr-1"/> 重置应用</button>
+              <div className="flex items-center space-x-3">
+                <button onClick={handleResetApp} className="text-red-500 text-xs font-bold flex items-center hover:underline"><RotateCcw size={14} className="mr-1"/> 重置应用</button>
+                <button onClick={clearCache} className="text-orange-500 text-xs font-bold flex items-center hover:underline"><FileDown size={14} className="mr-1"/> 清理缓存</button>
+              </div>
               <div className="flex items-center space-x-4">
                 <button onClick={() => setShowSnapshotModal(true)} className="text-indigo-500 text-xs font-bold flex items-center hover:underline"><History size={14} className="mr-1"/> 历史版本</button>
                 <button onClick={() => setShowSettingsModal(false)} className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 transition transform active:scale-95">保存设置</button>

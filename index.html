@@ -6,6 +6,9 @@
     <title>ZenPub - EPUB 编辑器</title>
     <meta name="description" content="在浏览器中直接撰写、编辑并导出 EPUB 电子书。" />
     
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.webmanifest">
+    
     <!-- 移动端 App 模式适配 -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -150,4 +153,40 @@
     <div id="root" class="h-full w-full"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
+  <script>
+    // 注册Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then(registration => {
+            console.log('Service Worker registered successfully:', registration);
+            
+            // 检查Service Worker是否有更新
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // 新的Service Worker已就绪，可以提示用户刷新
+                    console.log('New Service Worker available');
+                    // 这里可以添加一个通知提示用户刷新页面
+                  }
+                });
+              }
+            });
+          })
+          .catch(error => {
+            console.error('Service Worker registration failed:', error);
+          });
+      });
+    }
+    
+    // 监听来自Service Worker的消息
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', event => {
+        console.log('Message from Service Worker:', event.data);
+        // 这里可以处理来自Service Worker的消息
+      });
+    }
+  </script>
 </html>
