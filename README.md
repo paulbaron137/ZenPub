@@ -87,11 +87,6 @@ Vercel 是最简单的部署方式，支持自动化构建。
 4.  保持默认设置（Framework Preset 会自动识别为 Vite）。
 5.  点击 **Deploy**。等待约 1 分钟即可访问。
 
-### 环境变量 (可选)
-
-如果你希望启用项目中的 AI 写作辅助功能（基于 Google Gemini API），需要在部署时配置环境变量：
-
-*   `API_KEY`: 你的 Google Gemini API Key。
 
 ---
 
