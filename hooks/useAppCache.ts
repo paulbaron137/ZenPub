@@ -30,6 +30,9 @@ interface UseAppCacheProps {
   // 滚动位置引用
   editorRef: React.RefObject<HTMLTextAreaElement>;
   previewRef?: React.RefObject<HTMLDivElement>;
+  
+  // 可选配置
+  autoRestore?: boolean; // 是否自动恢复状态，默认为true
 }
 
 export const useAppCache = ({
@@ -54,7 +57,8 @@ export const useAppCache = ({
   setEditorWidthPercent,
   setPreviewConfig,
   editorRef,
-  previewRef
+  previewRef,
+  autoRestore = true
 }: UseAppCacheProps) => {
   // 状态管理
   const [isRestoring, setIsRestoring] = useState(true);
@@ -71,6 +75,10 @@ export const useAppCache = ({
       const editorScrollPosition = editorRef.current?.scrollTop || 0;
       const previewScrollPosition = previewRef?.current?.scrollTop || 0;
       
+      // 获取光标位置
+      const cursorStart = editorRef.current?.selectionStart || 0;
+      const cursorEnd = editorRef.current?.selectionEnd || 0;
+      
       // 保存用户状态
       await cacheService.saveUserState({
         lastOpenTime: Date.now(),
@@ -78,6 +86,10 @@ export const useAppCache = ({
         scrollPosition: {
           editor: editorScrollPosition,
           preview: previewScrollPosition
+        },
+        cursorPosition: {
+          start: cursorStart,
+          end: cursorEnd
         },
         viewMode,
         sidebarOpen,
@@ -146,11 +158,20 @@ export const useAppCache = ({
         
         console.log('User state restored successfully');
         
-        // 延迟恢复滚动位置，确保DOM已渲染
+        // 延迟恢复滚动位置和光标位置，确保DOM已渲染
         setTimeout(() => {
           if (editorRef.current) {
             editorRef.current.scrollTop = userState.scrollPosition.editor;
+            
+            // 恢复光标位置
+            const cursorStart = userState.cursorPosition?.start || 0;
+            const cursorEnd = userState.cursorPosition?.end || cursorStart;
+            
+            // 设置光标位置
+            editorRef.current.focus();
+            editorRef.current.setSelectionRange(cursorStart, cursorEnd);
           }
+          
           if (previewRef?.current) {
             previewRef.current.scrollTop = userState.scrollPosition.preview;
           }
@@ -190,7 +211,9 @@ export const useAppCache = ({
   
   // 页面加载时尝试恢复状态
   useEffect(() => {
-    restoreAppState();
+    if (autoRestore) {
+      restoreAppState();
+    }
     
     // 清理函数
     return () => {
@@ -198,7 +221,7 @@ export const useAppCache = ({
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [restoreAppState]);
+  }, [restoreAppState, autoRestore]);
   
   // 监听状态变化并自动保存
   useEffect(() => {
@@ -308,6 +331,7 @@ export const useAppCache = ({
     isRestoring,
     lastSaveTime,
     saveAppState,
-    clearCache
+    clearCache,
+    restoreAppState // 导出恢复状态函数
   };
 };

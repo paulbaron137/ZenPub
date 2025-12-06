@@ -1,5 +1,5 @@
 {
-  "name": "ZenPub v2.2.2 - 兼容性修复版",
-  "description": "专业的 Markdown/EPUB 编辑器 v2.2.2。修复 EPUB 封面兼容性及导出标题重复问题，支持自由分屏与多格式导出。",
+  "name": "ZenPub v2.3.0 - PWA缓存升级版",
+  "description": "专业的 Markdown/EPUB 编辑器 v2.3.0。升级为PWA应用，新增智能缓存系统和状态恢复功能。",
   "requestFramePermissions": []
 }

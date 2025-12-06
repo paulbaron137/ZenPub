@@ -15,6 +15,8 @@ import remarkGfm from 'remark-gfm';
 import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig } from './types';
 import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './services/epubService';
 import { useAppCache } from './hooks/useAppCache';
+import RestorePrompt from './components/RestorePrompt';
+import cacheService from './services/cacheService';
 
 // ... Constants ...
 const DEFAULT_CHAPTER: Chapter = {
@@ -70,9 +72,10 @@ const HELP_CONTENT = `
 - 脚注: 这是一个脚注[^1]
   \`[^1]: 脚注解释内容\`
 
-## v2.2.2 新特性
-- **兼容性修复**: 增强了导出文件在 Kindle/Apple Books 等阅读器上的兼容性。
-- **智能导出**: 修复了导出文件可能出现章节标题重复的问题。
+## v2.3.0 新特性
+- **PWA升级**: 升级为完整的PWA应用，支持离线使用和安装到主屏幕。
+- **智能缓存**: 新增恢复提示框，可选择恢复上次编辑状态和光标位置。
+- **状态恢复**: 精准恢复编辑位置、滚动位置和光标位置，提升工作效率。
 `;
 
 // ... rest of the App.tsx logic remains same ...
@@ -156,6 +159,13 @@ const App: React.FC = () => {
   
   // Toast State
   const [toast, setToast] = useState<{message: string, type: 'success'|'error'} | null>(null);
+  
+  // 恢复提示框状态
+  const [showRestorePrompt, setShowRestorePrompt] = useState(true);
+  const [hasRestorableState, setHasRestorableState] = useState(false);
+  const [isRestoringState, setIsRestoringState] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreChecked, setRestoreChecked] = useState(false);
 
   // Refs
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -276,6 +286,22 @@ const App: React.FC = () => {
     }
   }, [findText, activeChapter.content]);
 
+  // 检查是否有可恢复的状态
+  useEffect(() => {
+    const checkRestorableState = async () => {
+      try {
+        const hasState = await cacheService.hasRestorableState();
+        setHasRestorableState(hasState);
+        setRestoreChecked(true);
+      } catch (error) {
+        console.error('检查可恢复状态时出错:', error);
+        setHasRestorableState(false);
+        setRestoreChecked(true);
+      }
+    };
+    
+    checkRestorableState();
+  }, []);
 
   // --- Handlers ---
 
@@ -637,6 +663,7 @@ const App: React.FC = () => {
       setMetadata(result.metadata);
       setChapters(result.chapters);
       if (result.chapters.length > 0) setActiveChapterId(result.chapters[0].id);
+      setShowRestorePrompt(false); // 导入后关闭恢复提示
       showToast("导入成功！", "success");
     }).catch(err => {
       console.error(err);
@@ -645,10 +672,55 @@ const App: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // 恢复状态处理函数
+  const handleRestoreState = async () => {
+    setIsRestoringState(true);
+    setRestoreError(null);
+    
+    try {
+      // 调用缓存Hook中的恢复函数
+      await restoreState();
+      
+      // 模拟加载效果
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      setShowRestorePrompt(false);
+      showToast("状态已恢复", "success");
+    } catch (error) {
+      console.error('恢复状态时出错:', error);
+      setRestoreError("无法恢复上次编辑状态，请开始新文档");
+    } finally {
+      setIsRestoringState(false);
+    }
+  };
+
+  // 新建文档处理函数
+  const handleNewDocument = () => {
+    setShowRestorePrompt(false);
+    // 重置到默认状态
+    setMetadata(DEFAULT_METADATA);
+    setChapters([DEFAULT_CHAPTER]);
+    setActiveChapterId(DEFAULT_CHAPTER.id);
+    setViewMode('split');
+    setSidebarOpen(true);
+    setMemoOpen(false);
+    setTheme('light');
+    setSidebarWidth(256);
+    setEditorWidthPercent(50);
+    setPreviewConfig(DEFAULT_PREVIEW_CONFIG);
+    
+    // 清除缓存
+    cacheService.clearCache().catch(error => {
+      console.error('清除缓存时出错:', error);
+    });
+    
+    showToast("已创建新文档", "success");
+  };
+
   const isDark = theme === 'dark';
 
   // 使用应用缓存Hook
-  const { isRestoring, lastSaveTime, saveAppState, clearCache } = useAppCache({
+  const { isRestoring, lastSaveTime, saveAppState, clearCache, restoreAppState: restoreState } = useAppCache({
     metadata,
     chapters,
     activeChapterId,
@@ -670,7 +742,8 @@ const App: React.FC = () => {
     setEditorWidthPercent,
     setPreviewConfig,
     editorRef,
-    previewRef
+    previewRef,
+    autoRestore: false // 禁用自动恢复，我们将在恢复提示框中手动触发
   });
 
   // Calculate Styles for Split View
@@ -682,6 +755,18 @@ const App: React.FC = () => {
     <div className={`h-[100dvh] w-full flex flex-col overflow-hidden transition-colors duration-300 ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-gray-50 text-slate-900'}`}>
       
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
+      {/* 恢复提示框 */}
+      {restoreChecked && (
+        <RestorePrompt
+          isVisible={showRestorePrompt}
+          hasValidState={hasRestorableState}
+          onRestore={handleRestoreState}
+          onNewDocument={handleNewDocument}
+          isRestoring={isRestoringState}
+          restoreError={restoreError}
+        />
+      )}
       <input type="file" ref={fileInputRef} onChange={handleImportEpub} accept=".epub" className="hidden" />
       <input type="file" ref={imageInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
 
@@ -691,7 +776,7 @@ const App: React.FC = () => {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-md transition ${isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-black/5 text-gray-600'}`}><Menu size={20} /></button>
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
-            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.2.2</span></h1>
+            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.3.0</span></h1>
             {isRestoring && (
               <div className="flex items-center ml-2">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>

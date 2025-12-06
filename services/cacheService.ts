@@ -8,6 +8,10 @@ interface UserState {
     editor: number;
     preview: number;
   };
+  cursorPosition: {
+    start: number;
+    end: number;
+  };
   viewMode: ViewMode;
   sidebarOpen: boolean;
   memoOpen: boolean;
@@ -121,6 +125,55 @@ class CacheService {
       request.onerror = (event) => {
         console.error('Failed to retrieve user state:', event);
         reject(new Error('Failed to retrieve user state'));
+      };
+    });
+  }
+
+  // 检查是否有可恢复的状态
+  async hasRestorableState(): Promise<boolean> {
+    if (!this.db) await this.initDB();
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([this.storeNames.userState, this.storeNames.projectData], 'readonly');
+      const userStateStore = transaction.objectStore(this.storeNames.userState);
+      const projectDataStore = transaction.objectStore(this.storeNames.projectData);
+      
+      const userStateRequest = userStateStore.get('current');
+      const projectDataRequest = projectDataStore.get('current');
+      
+      let userState = null;
+      let projectData = null;
+      let completed = 0;
+      
+      const checkCompletion = () => {
+        completed++;
+        if (completed === 2) {
+          // 检查是否有有效的用户状态和项目数据
+          // 以及最后打开时间是否在最近7天内
+          const hasUserState = userState !== null && userState.activeChapterId !== undefined;
+          const hasProjectData = projectData !== null && projectData.chapters !== undefined && projectData.chapters.length > 0;
+          const isRecent = userState && userState.lastOpenTime && (Date.now() - userState.lastOpenTime) < 7 * 24 * 60 * 60 * 1000;
+          
+          resolve(hasUserState && hasProjectData && isRecent);
+        }
+      };
+      
+      userStateRequest.onsuccess = () => {
+        userState = userStateRequest.result;
+        checkCompletion();
+      };
+      
+      userStateRequest.onerror = () => {
+        checkCompletion();
+      };
+      
+      projectDataRequest.onsuccess = () => {
+        projectData = projectDataRequest.result;
+        checkCompletion();
+      };
+      
+      projectDataRequest.onerror = () => {
+        checkCompletion();
       };
     });
   }
