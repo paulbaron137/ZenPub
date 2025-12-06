@@ -1,20 +1,143 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 📚 ZenPub - 极简主义的 Markdown 转 EPUB 编辑器
 
-# Run and deploy your AI Studio app
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Built With](https://img.shields.io/badge/Built%20With-Google%20Gemini-4285F4.svg)
+![Tech Stack](https://img.shields.io/badge/Stack-React%20%7C%20Vite%20%7C%20Tailwind-38bdf8.svg)
 
-This contains everything you need to run your app locally.
+**ZenPub** 是一个运行在浏览器中的专业电子书写作与制作工具。它允许你使用 Markdown 语法专注于写作，并一键导出兼容性极佳的 EPUB 电子书或 PDF 文档。
 
-View your app in AI Studio: https://ai.studio/apps/drive/1LzBf0-KmwW3ooWE1-Oi52-qdXrJzZJUN
+本项目的所有代码设计与实现均由 **Google Gemini** 模型生成。
 
-## Run Locally
+---
 
-**Prerequisites:**  Node.js
+## ✨ 项目特色
 
+*   **完全本地化**：所有数据均在浏览器本地处理，无需上传服务器，保护您的隐私。
+*   **专业导出**：
+    *   **EPUB**: 针对 Apple Books、Kindle 及主流阅读器优化的 CSS 排版，支持封面、目录自动生成。
+    *   **PDF**: 支持 A4 排版导出，适合打印。
+    *   **Markdown**: 导出源码备份。
+*   **沉浸式写作**：
+    *   支持 **分屏预览** 与 **打字机模式**。
+    *   内置 **暗色模式**，护眼舒适。
+    *   支持 **本地快照时光机**，随时恢复历史版本。
+*   **EPUB 导入与解析**：支持导入现有的 EPUB 文件，自动解析章节结构、元数据和封面，方便二次编辑。
+*   **智能排版**：自动处理中文缩进、标点挤压及字体回退机制（宋体/黑体）。
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+
+## 🤖 关于 "AI 生成"
+
+这个项目是 **AI 辅助编程** 的一次实践。整个应用的架构、UI 设计、核心逻辑（如 EPUB 打包算法、Markdown 渲染）均通过与 **Google Gemini** 对话完成。
+
+### 💡 核心提示词 (Prompts)
+
+以下是构建此项目过程中使用的一些关键提示词，展示了 AI 如何一步步完善这个应用：
+
+1.  **初始构建**：
+    > "你是一名专业的安卓应用开发助手，请帮我生成一个完整的应用设计与实现方案。应用目标是一个基于 Web 的 Markdown 编辑器，支持导出为 EPUB 格式。"
+2.  **功能迭代**：
+    > "请增加一个侧边栏用于管理章节，支持拖拽排序。同时，我需要一个实时预览窗口，能够模拟手机和 A4 纸的显示效果。"
+3.  **视觉优化**：
+    > "请设计一套现代化的 UI，支持明亮/暗黑主题切换，使用 Tailwind CSS，字体需要针对中文阅读进行优化（使用 Noto Serif SC）。"
+4.  **Bug 修复 (V2.2.2 核心)**：
+    > "修复在其他导出文件在其他 epub 阅读器上无法识别封面和作者信息等，修复一章导出后存在重复标题，同时解决 XML 标签未闭合导致的 'Opening and ending tag mismatch' 错误。"
+
+---
+
+## 🚀 快速开始
+
+### 在线体验
+
+(在此处填写你的 Vercel 部署链接，例如：`https://your-zenpub-project.vercel.app`)
+
+### 本地运行
+
+确保你的电脑上安装了 [Node.js](https://nodejs.org/) (推荐 v18+)。
+
+1.  **克隆项目**
+    ```bash
+    git clone https://github.com/your-username/zenpub.git
+    cd zenpub
+    ```
+
+2.  **安装依赖**
+    ```bash
+    npm install
+    ```
+
+3.  **启动开发服务器**
+    ```bash
+    npm run dev
+    ```
+
+4.  打开浏览器访问 `http://localhost:5173`。
+
+---
+
+## 🛠️ 部署指南
+
+### 部署到 Vercel (推荐)
+
+Vercel 是最简单的部署方式，支持自动化构建。
+
+1.  Fork 本仓库到你的 GitHub。
+2.  登录 [Vercel](https://vercel.com/) 并点击 **"Add New..."** -> **"Project"**.
+3.  选择你刚才 Fork 的 `zenpub` 仓库。
+4.  保持默认设置（Framework Preset 会自动识别为 Vite）。
+5.  点击 **Deploy**。等待约 1 分钟即可访问。
+
+### 环境变量 (可选)
+
+如果你希望启用项目中的 AI 写作辅助功能（基于 Google Gemini API），需要在部署时配置环境变量：
+
+*   `API_KEY`: 你的 Google Gemini API Key。
+
+---
+
+## 📖 使用说明
+
+1.  **书籍设置**：点击右上角的 ⚙️ 图标，设置书名、作者、简介并上传封面图片。
+2.  **章节管理**：在左侧侧边栏点击 `+` 添加新章节，支持拖拽调整顺序（未来版本）。
+3.  **写作**：使用中间的编辑器撰写内容。支持 Markdown 快捷键（如 `Ctrl+B` 加粗）。
+4.  **预览**：点击顶部的视图切换按钮，查看在手机或 PC 上的渲染效果。
+5.  **导出**：点击右上角的 "导出" 按钮，选择 `EPUB` 即可生成电子书文件。
+
+---
+
+## 📅 更新日志 (Changelog)
+
+### v2.2.2 (Current) - 2024-05-22
+*   **兼容性修复**：
+    *   修复了生成的 EPUB 文件在 Apple Books 和 Kindle 上无法识别封面的问题（增加了 EPUB 2/3 双重元数据支持）。
+    *   修复了 XHTML 严格模式下的标签闭合错误 (`<hr>` -> `<hr />`)，解决了部分阅读器报错的问题。
+*   **逻辑优化**：
+    *   优化导出逻辑：智能检测章节内容，如果文中已包含标题，不再强制重复添加一级标题，避免“双重标题”现象。
+
+### v2.2.0 - 2024-05-15
+*   **UI 升级**：
+    *   全面优化 **暗色模式 (Dark Mode)** 的配色方案，包括滚动条、排版颜色及预览区域。
+    *   新增 **分屏模式**，支持左侧编辑右侧实时预览。
+*   **功能增强**：
+    *   新增 **本地时光机 (Snapshots)**：自动保存和手动创建内容快照，防止数据丢失。
+    *   新增 **打字机模式**：输入时当前行始终保持在屏幕中央。
+
+### v2.0.0 - 2024-04-20
+*   **架构重构**：
+    *   从单一文件重构为模块化架构 (`services`, `types` 分离)。
+    *   引入 `JSZip` 和 `Turndown` 实现高质量的 EPUB 导入与导出。
+*   **核心功能**：
+    *   支持 EPUB 文件导入，自动解析章节和图片。
+    *   支持 PDF (A4 格式) 导出。
+
+### v1.0.0 - 2024-03-01
+*   **初始版本**：
+    *   基础的 Markdown 编辑功能。
+    *   简单的章节管理。
+    *   基础元数据设置。
+
+---
+
+## 📄 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。你可以免费使用、修改和分发本项目。
