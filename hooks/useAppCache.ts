@@ -175,11 +175,19 @@ export const useAppCache = ({
           if (previewRef?.current) {
             previewRef.current.scrollTop = userState.scrollPosition.preview;
           }
+          
+          // 确保恢复完成后更新状态
+          setIsRestoring(false);
+          isInitializedRef.current = true;
         }, 100);
+      } else {
+        // 如果没有用户状态，也需要重置恢复状态
+        setIsRestoring(false);
+        isInitializedRef.current = true;
       }
     } catch (error) {
       console.error('Failed to restore application state:', error);
-    } finally {
+      // 即使出错也要重置恢复状态
       setIsRestoring(false);
       isInitializedRef.current = true;
     }

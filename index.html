@@ -14,10 +14,16 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#ffffff">
+    
+    <!-- 预加载关键资源 -->
+    <link rel="preload" href="/Gemini_Generated_Image_xueq52xueq52xueq.png" as="image">
 
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 添加 Noto Serif SC (宋体) 和 Noto Sans SC (黑体) 以更好地支持中文显示 -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <!-- 添加 Noto Serif SC (宋体) 和 Noto Sans SC (黑体) 以更好地支持中文显示 - 异步加载 -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;700&family=JetBrains+Mono&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    </noscript>
     <script>
       tailwind.config = {
         darkMode: 'class', // 确保暗色模式可以通过类控制

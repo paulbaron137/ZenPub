@@ -17,6 +17,7 @@ import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './servi
 import { useAppCache } from './hooks/useAppCache';
 import RestorePrompt from './components/RestorePrompt';
 import cacheService from './services/cacheService';
+import { useDragAndDrop } from './hooks/useDragAndDrop';
 
 // ... Constants ...
 const DEFAULT_CHAPTER: Chapter = {
@@ -166,6 +167,42 @@ const App: React.FC = () => {
   const [isRestoringState, setIsRestoringState] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreChecked, setRestoreChecked] = useState(false);
+  
+  // 使用拖拽排序Hook
+  const {
+    draggedItem,
+    dragOverIndex,
+    handleDragStart,
+    handleDragEnter,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    handleDragEnd
+  } = useDragAndDrop(chapters, (fromIndex, toIndex) => {
+    // 重新排序章节
+    const newChapters = [...chapters];
+    const [movedChapter] = newChapters.splice(fromIndex, 1);
+    newChapters.splice(toIndex, 0, movedChapter);
+    
+    // 更新order属性
+    const reorderedChapters = newChapters.map((chapter, index) => ({
+      ...chapter,
+      order: index
+    }));
+    
+    setChapters(reorderedChapters);
+    
+    // 如果移动的是当前活动章节，需要更新活动章节ID
+    if (activeChapterId === movedChapter.id) {
+      // 检查移动后是否有相同ID的章节
+      const newActiveChapter = reorderedChapters.find(c => c.id === activeChapterId);
+      if (newActiveChapter) {
+        setActiveChapterId(newActiveChapter.id);
+      }
+    }
+    
+    showToast(`章节 "${movedChapter.title}" 已移动到位置 ${toIndex + 1}`, "success");
+  });
 
   // Refs
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -854,12 +891,37 @@ const App: React.FC = () => {
                  <div className="text-center text-gray-400 text-xs py-4">未找到匹配章节</div>
               )}
               {filteredChapters.map((chapter, idx) => (
-                <div key={chapter.id} onClick={() => { setActiveChapterId(chapter.id); if (window.innerWidth < 768) setSidebarOpen(false); }} className={`group relative flex items-center px-4 py-3 cursor-pointer text-sm border-l-4 transition-colors ${activeChapterId === chapter.id ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100 font-medium' : 'border-transparent hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'}`}>
+                <div 
+                  key={chapter.id} 
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, idx, chapter.id)}
+                  onDragEnter={(e) => handleDragEnter(e, idx)}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => { setActiveChapterId(chapter.id); if (window.innerWidth < 768) setSidebarOpen(false); }} 
+                  className={`group relative flex items-center px-4 py-3 cursor-pointer text-sm border-l-4 transition-colors ${
+                    activeChapterId === chapter.id 
+                      ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20 text-indigo-900 dark:text-indigo-100 font-medium' 
+                      : 'border-transparent hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'
+                  } ${
+                    draggedItem?.index === idx ? 'opacity-50' : ''
+                  } ${
+                    dragOverIndex === idx ? 'bg-indigo-100 dark:bg-indigo-900/40' : ''
+                  }`}
+                  style={{ cursor: draggedItem ? 'grabbing' : 'grab' }}
+                >
                   <span className="w-6 text-xs text-gray-400 dark:text-gray-600 font-mono mr-2">{idx + 1}.</span>
                   <span className="truncate flex-1 py-1">
                     <HighlightedText text={chapter.title} highlight={chapterSearchQuery} />
                   </span>
-                  <button onClick={(e) => deleteChapter(chapter.id, e)} className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all absolute right-2"><Trash2 size={14} /></button>
+                  <button 
+                    onClick={(e) => deleteChapter(chapter.id, e)} 
+                    className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-all absolute right-2"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -1035,7 +1097,7 @@ const App: React.FC = () => {
                 <button onClick={clearCache} className="text-orange-500 text-xs font-bold flex items-center hover:underline"><FileDown size={14} className="mr-1"/> 清理缓存</button>
               </div>
               <div className="flex items-center space-x-4">
-                <button onClick={() => setShowSnapshotModal(true)} className="text-indigo-500 text-xs font-bold flex items-center hover:underline"><History size={14} className="mr-1"/> 历史版本</button>
+                <button onClick={() => { setShowSnapshotModal(true); setShowSettingsModal(false); }} className="text-indigo-500 text-xs font-bold flex items-center hover:underline"><History size={14} className="mr-1"/> 历史版本</button>
                 <button onClick={() => setShowSettingsModal(false)} className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 transition transform active:scale-95">保存设置</button>
               </div>
             </div>

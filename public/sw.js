@@ -2,39 +2,63 @@
 const CACHE_NAME = 'zenpub-cache-v1';
 const DYNAMIC_CACHE_NAME = 'zenpub-dynamic-v1';
 
-// 静态资源缓存列表
+// 静态资源缓存列表 - 只缓存核心资源，减少首次加载时间
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
+  // Icons and images
+  '/Gemini_Generated_Image_xueq52xueq52xueq.png',
+  // 外部字体资源延迟加载，不缓存
+  'https://cdn.tailwindcss.com'
+];
+
+// 延迟缓存资源 - 在页面加载后再缓存
+const DEFERRED_ASSETS = [
   '/index.css',
   // App scripts and styles
   '/index.tsx',
   '/App.tsx',
   '/types.ts',
-  // Icons and images
-  '/Gemini_Generated_Image_xueq52xueq52xueq.png',
-  // External resources
-  'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;700&family=JetBrains+Mono&display=swap',
-  'https://cdn.tailwindcss.com'
+  // 外部字体资源
+  'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;700&family=JetBrains+Mono&display=swap'
 ];
 
-// 安装事件 - 预缓存静态资源
+// 安装事件 - 预缓存核心静态资源
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing Service Worker...');
   
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('[SW] Pre-caching static assets');
+        console.log('[SW] Pre-caching core static assets');
         return cache.addAll(STATIC_ASSETS);
       })
       .then(() => {
-        console.log('[SW] Installation complete');
+        console.log('[SW] Core assets cached, skipping waiting to activate immediately');
         return self.skipWaiting();
       })
       .catch((error) => {
         console.error('[SW] Installation failed:', error);
+      })
+  );
+});
+
+// 延迟缓存非关键资源 - 在激活后执行
+self.addEventListener('activate', (event) => {
+  console.log('[SW] Activating Service Worker...');
+  
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => {
+        console.log('[SW] Caching deferred assets');
+        return cache.addAll(DEFERRED_ASSETS);
+      })
+      .then(() => {
+        console.log('[SW] Deferred assets cached successfully');
+      })
+      .catch((error) => {
+        console.error('[SW] Failed to cache deferred assets:', error);
       })
   );
 });
