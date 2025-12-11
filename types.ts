@@ -26,6 +26,12 @@ export interface Snapshot {
   description: string;
 }
 
+export interface EditorConfig {
+  fontSize: number;
+  lineHeight: number;
+  tabSize: number;
+}
+
 export interface PreviewConfig {
   viewMode: 'mobile' | 'desktop' | 'a4';
   fontSize: number;

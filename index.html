@@ -136,6 +136,22 @@
         border-color: #0f172a;
         color: #e2e8f0;
       }
+      /* 添加暗色模式下统一的预览区样式 */
+      .dark .preview-desktop {
+        background: #1e293b;
+        color: #e2e8f0;
+      }
+      .dark .prose-invert {
+        color: #e2e8f0;
+      }
+      .dark .prose-invert h1,
+      .dark .prose-invert h2,
+      .dark .prose-invert h3 {
+        color: #f1f5f9;
+      }
+      .dark .prose-invert p {
+        color: #e2e8f0;
+      }
     </style>
   <script type="importmap">
 {
@@ -160,64 +176,16 @@
     <script type="module" src="/index.tsx"></script>
   </body>
   <script>
-    // 注册Service Worker
+    // 注册Service Worker (简化版，仅用于PWA安装)
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        const isVercel = window.location.hostname.includes('vercel.app') || 
-                        window.location.hostname.includes('vercel.com');
-        
-        console.log(`[App] Registering Service Worker...${isVercel ? ' (Vercel Environment)' : ''}`);
-        
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
           .then(registration => {
             console.log('[App] Service Worker registered successfully:', registration);
-            
-            // 检查Service Worker是否有更新
-            registration.addEventListener('updatefound', () => {
-              const newWorker = registration.installing;
-              if (newWorker) {
-                console.log('[App] New Service Worker found, installing...');
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // 新的Service Worker已就绪，可以提示用户刷新
-                    console.log('[App] New Service Worker available, please refresh the page');
-                    // 在Vercel环境中，自动刷新以确保用户获取最新版本
-                    if (isVercel) {
-                      setTimeout(() => {
-                        if (confirm('检测到新版本，是否自动刷新以获取最新功能？')) {
-                          window.location.reload();
-                        }
-                      }, 1000);
-                    }
-                  }
-                });
-              }
-            });
-            
-            // 定期检查Service Worker状态
-            if (isVercel) {
-              setInterval(() => {
-                if (registration.active) {
-                  registration.active.postMessage({ type: 'PING' });
-                }
-              }, 30000); // 每30秒检查一次
-            }
           })
           .catch(error => {
             console.error('[App] Service Worker registration failed:', error);
-            // 在Vercel环境中，Service Worker注册失败不应该阻止应用运行
-            if (isVercel) {
-              console.warn('[App] Vercel environment detected, continuing without Service Worker');
-            }
           });
-      });
-    }
-    
-    // 监听来自Service Worker的消息
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('message', event => {
-        console.log('Message from Service Worker:', event.data);
-        // 这里可以处理来自Service Worker的消息
       });
     }
   </script>

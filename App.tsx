@@ -12,11 +12,8 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig } from './types';
+import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig, EditorConfig } from './types';
 import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './services/epubService';
-import { useAppCache } from './hooks/useAppCache';
-import RestorePrompt from './components/RestorePrompt';
-import cacheService from './services/cacheService';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 
 // ... Constants ...
@@ -42,6 +39,12 @@ const DEFAULT_PREVIEW_CONFIG: PreviewConfig = {
   fontSize: 16,
   lineHeight: 1.8,
   indent: 2
+};
+
+const DEFAULT_EDITOR_CONFIG: EditorConfig = {
+  fontSize: 14,
+  lineHeight: 1.6,
+  tabSize: 2
 };
 
 const HELP_CONTENT = `
@@ -73,10 +76,11 @@ const HELP_CONTENT = `
 - 脚注: 这是一个脚注[^1]
   \`[^1]: 脚注解释内容\`
 
-## v2.3.0 新特性
-- **PWA升级**: 升级为完整的PWA应用，支持离线使用和安装到主屏幕。
-- **智能缓存**: 新增恢复提示框，可选择恢复上次编辑状态和光标位置。
-- **状态恢复**: 精准恢复编辑位置、滚动位置和光标位置，提升工作效率。
+## v2.4.0 新特性
+- **UI优化**: 调整暗色模式配色方案，统一视觉体验。
+- **字号控制**: 实现输入区和预览区独立的字号控制功能。
+- **智能替换**: 优化替换功能算法，智能跳过Markdown语法标记。
+- **简化架构**: 移除缓存系统，专注于核心编辑功能，提升稳定性。
 `;
 
 // ... rest of the App.tsx logic remains same ...
@@ -133,6 +137,7 @@ const App: React.FC = () => {
 
   // Feature States
   const [isTypewriterMode, setIsTypewriterMode] = useState(false);
+  const [editorConfig, setEditorConfig] = useState<EditorConfig>(DEFAULT_EDITOR_CONFIG);
   const [previewConfig, setPreviewConfig] = useState<PreviewConfig>(DEFAULT_PREVIEW_CONFIG);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [showSnapshotModal, setShowSnapshotModal] = useState(false);
@@ -160,13 +165,6 @@ const App: React.FC = () => {
   
   // Toast State
   const [toast, setToast] = useState<{message: string, type: 'success'|'error'} | null>(null);
-  
-  // 恢复提示框状态
-  const [showRestorePrompt, setShowRestorePrompt] = useState(true);
-  const [hasRestorableState, setHasRestorableState] = useState(false);
-  const [isRestoringState, setIsRestoringState] = useState(false);
-  const [restoreError, setRestoreError] = useState<string | null>(null);
-  const [restoreChecked, setRestoreChecked] = useState(false);
   
   // 使用拖拽排序Hook
   const {
@@ -323,22 +321,7 @@ const App: React.FC = () => {
     }
   }, [findText, activeChapter.content]);
 
-  // 检查是否有可恢复的状态
-  useEffect(() => {
-    const checkRestorableState = async () => {
-      try {
-        const hasState = await cacheService.hasRestorableState();
-        setHasRestorableState(hasState);
-        setRestoreChecked(true);
-      } catch (error) {
-        console.error('检查可恢复状态时出错:', error);
-        setHasRestorableState(false);
-        setRestoreChecked(true);
-      }
-    };
-    
-    checkRestorableState();
-  }, []);
+
 
   // --- Handlers ---
 
@@ -486,11 +469,61 @@ const App: React.FC = () => {
     }
   };
 
+  // 智能替换功能 - 跳过Markdown语法标记
   const handleReplaceAll = () => {
     if (!findText) return;
-    const newContent = activeChapter.content.replaceAll(findText, replaceText);
+    
+    // 定义Markdown语法标记的正则表达式
+    const markdownPatterns = [
+      /^#{1,6}\s/gm, // 标题
+      /\*\*[^*]*\*\*/g, // 加粗
+      /\*[^*]*\*/g, // 斜体
+      /~~[^~]*~~/g, // 删除线
+      /\[[^\]]*\]\([^)]*\)/g, // 链接
+      /!\[[^\]]*\]\([^)]*\)/g, // 图片
+      /`[^`]*`/g, // 行内代码
+      /```[\s\S]*```/g, // 代码块
+      />\s[^>]*\n/g, // 引用
+      /^\s*[-+*]\s/gm, // 列表项
+      /^\s*\d+\.\s/gm, // 有序列表项
+      /\[[^\]]*\]/g, // 脚注引用
+      /^\s*---\s*$/gm // 分割线
+    ];
+    
+    let newContent = activeChapter.content;
+    let replacements = 0;
+    
+    // 分割内容为行，逐行处理
+    const lines = newContent.split('\n');
+    const newLines = lines.map(line => {
+      let processedLine = line;
+      
+      // 检查是否包含Markdown语法
+      let isInMarkdownSyntax = false;
+      for (const pattern of markdownPatterns) {
+        if (pattern.test(processedLine)) {
+          isInMarkdownSyntax = true;
+          break;
+        }
+      }
+      
+      // 如果不是Markdown语法，则进行替换
+      if (!isInMarkdownSyntax) {
+        const beforeLength = processedLine.length;
+        processedLine = processedLine.replaceAll(findText, replaceText);
+        if (processedLine.length !== beforeLength) {
+          // 计算替换次数
+          const occurrences = (processedLine.match(new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+          replacements += occurrences;
+        }
+      }
+      
+      return processedLine;
+    });
+    
+    newContent = newLines.join('\n');
     handleContentInput(newContent);
-    showToast("已全部替换");
+    showToast(`已完成 ${replacements} 处替换`, "success");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -700,7 +733,6 @@ const App: React.FC = () => {
       setMetadata(result.metadata);
       setChapters(result.chapters);
       if (result.chapters.length > 0) setActiveChapterId(result.chapters[0].id);
-      setShowRestorePrompt(false); // 导入后关闭恢复提示
       showToast("导入成功！", "success");
     }).catch(err => {
       console.error(err);
@@ -709,42 +741,8 @@ const App: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // 恢复状态处理函数
-  const handleRestoreState = async () => {
-    setIsRestoringState(true);
-    setRestoreError(null);
-    
-    try {
-      console.log('[App] Starting state restoration...');
-      
-      // 调用缓存Hook中的恢复函数
-      await restoreState();
-      
-      // 等待状态恢复完成
-      let attempts = 0;
-      while (isRestoring && attempts < 10) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-        attempts++;
-      }
-      
-      // 检查恢复是否成功
-      if (isRestoring) {
-        console.warn('[App] State restoration is taking too long, proceeding anyway');
-      }
-      
-      setShowRestorePrompt(false);
-      showToast("状态已恢复", "success");
-    } catch (error) {
-      console.error('[App] 恢复状态时出错:', error);
-      setRestoreError("无法恢复上次编辑状态，请开始新文档");
-    } finally {
-      setIsRestoringState(false);
-    }
-  };
-
   // 新建文档处理函数
   const handleNewDocument = () => {
-    setShowRestorePrompt(false);
     // 重置到默认状态
     setMetadata(DEFAULT_METADATA);
     setChapters([DEFAULT_CHAPTER]);
@@ -756,43 +754,12 @@ const App: React.FC = () => {
     setSidebarWidth(256);
     setEditorWidthPercent(50);
     setPreviewConfig(DEFAULT_PREVIEW_CONFIG);
-    
-    // 清除缓存
-    cacheService.clearCache().catch(error => {
-      console.error('清除缓存时出错:', error);
-    });
+    setEditorConfig(DEFAULT_EDITOR_CONFIG);
     
     showToast("已创建新文档", "success");
   };
 
   const isDark = theme === 'dark';
-
-  // 使用应用缓存Hook
-  const { isRestoring, lastSaveTime, saveAppState, clearCache, restoreAppState: restoreState } = useAppCache({
-    metadata,
-    chapters,
-    activeChapterId,
-    viewMode,
-    sidebarOpen,
-    memoOpen,
-    theme,
-    sidebarWidth,
-    editorWidthPercent,
-    previewConfig,
-    setMetadata,
-    setChapters,
-    setActiveChapterId,
-    setViewMode,
-    setSidebarOpen,
-    setMemoOpen,
-    setTheme,
-    setSidebarWidth,
-    setEditorWidthPercent,
-    setPreviewConfig,
-    editorRef,
-    previewRef,
-    autoRestore: false // 禁用自动恢复，我们将在恢复提示框中手动触发
-  });
 
   // Calculate Styles for Split View
   const sidebarStyle = { width: sidebarOpen ? (window.innerWidth < 768 ? '18rem' : `${sidebarWidth}px`) : '0px' };
@@ -803,18 +770,6 @@ const App: React.FC = () => {
     <div className={`h-[100dvh] w-full flex flex-col overflow-hidden transition-colors duration-300 ${isDark ? 'bg-slate-900 text-slate-100' : 'bg-gray-50 text-slate-900'}`}>
       
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      
-      {/* 恢复提示框 */}
-      {restoreChecked && (
-        <RestorePrompt
-          isVisible={showRestorePrompt}
-          hasValidState={hasRestorableState}
-          onRestore={handleRestoreState}
-          onNewDocument={handleNewDocument}
-          isRestoring={isRestoringState}
-          restoreError={restoreError}
-        />
-      )}
       <input type="file" ref={fileInputRef} onChange={handleImportEpub} accept=".epub" className="hidden" />
       <input type="file" ref={imageInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
 
@@ -824,19 +779,7 @@ const App: React.FC = () => {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-md transition ${isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-black/5 text-gray-600'}`}><Menu size={20} /></button>
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
-            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.3.0</span></h1>
-            {isRestoring && (
-              <div className="flex items-center ml-2">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <span className="text-xs ml-1 text-gray-500 dark:text-gray-400">恢复中...</span>
-              </div>
-            )}
-            {lastSaveTime && !isRestoring && (
-              <div className="flex items-center ml-2">
-                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                <span className="text-xs ml-1 text-gray-500 dark:text-gray-400">已保存</span>
-              </div>
-            )}
+            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.4.0</span></h1>
           </div>
         </div>
         <div className={`hidden sm:flex rounded-lg p-1 mx-2 ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
@@ -975,6 +918,9 @@ const App: React.FC = () => {
                   <button onClick={() => setShowSearchPanel(!showSearchPanel)} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition ${isDark ? 'text-gray-300' : 'text-gray-600'} ${showSearchPanel ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600' : ''}`} title="查找替换 (Ctrl+F)"><SearchIcon size={16}/></button>
                </div>
                <div className="flex items-center space-x-2 pl-2 border-l dark:border-slate-700 flex-none">
+                  <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.max(10, p.fontSize - 1) }))} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Minus size={12}/></button>
+                  <span className="text-xs text-gray-500 font-mono w-4 text-center">{editorConfig.fontSize}</span>
+                  <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.min(24, p.fontSize + 1) }))} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Plus size={12}/></button>
                   <button onClick={() => setIsTypewriterMode(!isTypewriterMode)} className={`p-2 rounded transition ${isTypewriterMode ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`} title="打字机模式"><AlignVerticalJustifyCenter size={18} /></button>
                   <button onClick={() => setMemoOpen(!memoOpen)} className={`p-2 rounded transition relative ${memoOpen ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'hover:bg-gray-100 text-gray-400 dark:hover:bg-slate-700'}`}><StickyNote size={18}/>{activeChapter.memo && activeChapter.memo.trim().length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800"></span>}</button>
                </div>
@@ -997,13 +943,13 @@ const App: React.FC = () => {
                  </div>
                  <span className="text-xs text-gray-400 w-16 text-center">{matchCount > 0 ? `${currentMatchIndex + 1}/${matchCount}` : '0/0'}</span>
                  <button onClick={handleReplace} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white">替换</button>
-                 <button onClick={handleReplaceAll} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white">全部替换</button>
+                 <button onClick={handleReplaceAll} className="text-xs px-2 py-1 bg-white border rounded hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-white">智能替换</button>
                  <button onClick={() => setShowSearchPanel(false)} className="ml-auto text-gray-400 hover:text-red-500"><XCircle size={16}/></button>
               </div>
             )}
 
             <div className={`flex-none px-4 sm:px-6 pt-6 pb-2 ${isDark ? 'bg-slate-900' : 'bg-white'}`}><input type="text" value={activeChapter.title} onChange={(e) => handleUpdateTitle(e.target.value)} className={`w-full text-2xl font-bold bg-transparent border-none focus:ring-0 placeholder-gray-300 dark:placeholder-slate-700 p-0 ${isDark ? 'text-white' : 'text-gray-900'}`} placeholder="输入章节标题..." /></div>
-            <textarea ref={editorRef} className={`flex-1 w-full px-4 sm:px-6 py-4 resize-none outline-none font-mono text-base sm:text-sm leading-7 custom-scrollbar ${isDark ? 'bg-slate-900 text-slate-300 selection:bg-indigo-500/30' : 'bg-white text-slate-700 selection:bg-indigo-100'}`} value={activeChapter.content} onChange={(e) => handleContentInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="在此处开始您的创作..." spellCheck={false} />
+            <textarea ref={editorRef} className={`flex-1 w-full px-4 sm:px-6 py-4 resize-none outline-none font-mono custom-scrollbar ${isDark ? 'bg-slate-900 text-slate-300 selection:bg-indigo-500/30' : 'bg-white text-slate-700 selection:bg-indigo-100'}`} style={{ fontSize: `${editorConfig.fontSize}px`, lineHeight: editorConfig.lineHeight }} value={activeChapter.content} onChange={(e) => handleContentInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="在此处开始您的创作..." spellCheck={false} />
           </div>
           
           {/* Editor/Preview Resizer */}
@@ -1033,7 +979,7 @@ const App: React.FC = () => {
                <button onClick={() => setViewMode('editor')} className="sm:hidden p-2 text-gray-500 hover:text-red-500 transition"><X size={18} /></button>
              </div>
              
-             <div ref={previewRef} className="flex-1 overflow-y-auto custom-scrollbar bg-gray-100 dark:bg-black/30">
+             <div ref={previewRef} className={`flex-1 overflow-y-auto custom-scrollbar ${isDark ? 'bg-slate-800' : 'bg-gray-100'}`}>
                <div className="preview-container-wrapper">
                  <div 
                     className={`
@@ -1047,9 +993,9 @@ const App: React.FC = () => {
                       lineHeight: previewConfig.lineHeight
                     }}
                  >
-                   <h1 className={`font-serif text-3xl md:text-4xl mb-12 text-center font-bold pb-4 border-b ${isDark && previewConfig.viewMode === 'desktop' ? 'border-white/10 text-gray-100' : 'border-black/5 text-gray-900'}`}>{activeChapter.title}</h1>
-                   <div className={`prose prose-lg ${isDark && previewConfig.viewMode === 'desktop' ? 'prose-invert' : 'prose-slate'} font-serif max-w-none`}>
-                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={{p: ({node, ...props}) => <p className="mb-6 text-justify" style={{textIndent: `${previewConfig.indent}em`}} {...props} />, h1: ({node, ...props}) => <h1 className="font-sans font-bold text-2xl mt-8 mb-4 text-center" {...props} />, blockquote: ({node, ...props}) => <blockquote className="not-italic border-l-4 border-gray-300 pl-4 py-1 my-6 text-gray-500 bg-gray-50 dark:bg-white/5 dark:border-gray-600 pr-2" {...props} />}}>{activeChapter.content}</ReactMarkdown>
+                   <h1 className={`font-serif text-3xl md:text-4xl mb-12 text-center font-bold pb-4 border-b ${isDark ? 'border-slate-600 text-slate-100' : 'border-black/5 text-gray-900'}`}>{activeChapter.title}</h1>
+                   <div className={`prose prose-lg ${isDark ? 'prose-invert' : 'prose-slate'} font-serif max-w-none`}>
+                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={{p: ({node, ...props}) => <p className="mb-6 text-justify" style={{textIndent: `${previewConfig.indent}em`}} {...props} />, h1: ({node, ...props}) => <h1 className="font-sans font-bold text-2xl mt-8 mb-4 text-center" {...props} />, blockquote: ({node, ...props}) => <blockquote className={`not-italic border-l-4 pl-4 py-1 my-6 pr-2 ${isDark ? 'border-slate-600 text-slate-400 bg-slate-700/30' : 'border-gray-300 text-gray-500 bg-gray-50'}`} {...props} />}}>{activeChapter.content}</ReactMarkdown>
                    </div>
                  </div>
                </div>
@@ -1105,7 +1051,6 @@ const App: React.FC = () => {
             <div className={`p-4 border-t ${isDark ? 'border-slate-700 bg-slate-800' : 'bg-gray-50'} flex justify-between items-center`}>
               <div className="flex items-center space-x-3">
                 <button onClick={handleResetApp} className="text-red-500 text-xs font-bold flex items-center hover:underline"><RotateCcw size={14} className="mr-1"/> 重置应用</button>
-                <button onClick={clearCache} className="text-orange-500 text-xs font-bold flex items-center hover:underline"><FileDown size={14} className="mr-1"/> 清理缓存</button>
               </div>
               <div className="flex items-center space-x-4">
                 <button onClick={() => { setShowSnapshotModal(true); setShowSettingsModal(false); }} className="text-indigo-500 text-xs font-bold flex items-center hover:underline"><History size={14} className="mr-1"/> 历史版本</button>
