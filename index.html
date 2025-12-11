@@ -163,26 +163,52 @@
     // 注册Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
+        const isVercel = window.location.hostname.includes('vercel.app') || 
+                        window.location.hostname.includes('vercel.com');
+        
+        console.log(`[App] Registering Service Worker...${isVercel ? ' (Vercel Environment)' : ''}`);
+        
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
           .then(registration => {
-            console.log('Service Worker registered successfully:', registration);
+            console.log('[App] Service Worker registered successfully:', registration);
             
             // 检查Service Worker是否有更新
             registration.addEventListener('updatefound', () => {
               const newWorker = registration.installing;
               if (newWorker) {
+                console.log('[App] New Service Worker found, installing...');
                 newWorker.addEventListener('statechange', () => {
                   if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                     // 新的Service Worker已就绪，可以提示用户刷新
-                    console.log('New Service Worker available');
-                    // 这里可以添加一个通知提示用户刷新页面
+                    console.log('[App] New Service Worker available, please refresh the page');
+                    // 在Vercel环境中，自动刷新以确保用户获取最新版本
+                    if (isVercel) {
+                      setTimeout(() => {
+                        if (confirm('检测到新版本，是否自动刷新以获取最新功能？')) {
+                          window.location.reload();
+                        }
+                      }, 1000);
+                    }
                   }
                 });
               }
             });
+            
+            // 定期检查Service Worker状态
+            if (isVercel) {
+              setInterval(() => {
+                if (registration.active) {
+                  registration.active.postMessage({ type: 'PING' });
+                }
+              }, 30000); // 每30秒检查一次
+            }
           })
           .catch(error => {
-            console.error('Service Worker registration failed:', error);
+            console.error('[App] Service Worker registration failed:', error);
+            // 在Vercel环境中，Service Worker注册失败不应该阻止应用运行
+            if (isVercel) {
+              console.warn('[App] Vercel environment detected, continuing without Service Worker');
+            }
           });
       });
     }

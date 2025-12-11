@@ -6,7 +6,7 @@
   "background_color": "#ffffff",
   "display": "standalone",
   "orientation": "any",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "icons": [
     {
@@ -23,5 +23,17 @@
     }
   ],
   "categories": ["productivity", "utilities"],
-  "lang": "zh-CN"
+  "lang": "zh-CN",
+  "prefer_related_applications": false,
+  "protocol_handlers": [],
+  "related_applications": [],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }

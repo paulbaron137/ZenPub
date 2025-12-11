@@ -130,63 +130,87 @@ export const useAppCache = ({
   // 恢复应用状态的函数
   const restoreAppState = useCallback(async () => {
     try {
+      console.log('[useAppCache] Starting state restoration...');
       setIsRestoring(true);
+      
+      // 设置超时，防止永久卡在恢复状态
+      const restorationTimeout = setTimeout(() => {
+        console.warn('[useAppCache] Restoration timeout, forcing completion');
+        setIsRestoring(false);
+        isInitializedRef.current = true;
+      }, 5000); // 5秒超时
       
       // 尝试恢复用户状态和项目数据
       const [userState, projectData] = await Promise.all([
-        cacheService.getUserState(),
-        cacheService.getProjectData()
+        cacheService.getUserState().catch(err => {
+          console.error('[useAppCache] Failed to get user state:', err);
+          return null;
+        }),
+        cacheService.getProjectData().catch(err => {
+          console.error('[useAppCache] Failed to get project data:', err);
+          return null;
+        })
       ]);
       
       // 恢复项目数据
-      if (projectData) {
+      if (projectData && projectData.metadata && projectData.chapters) {
         setMetadata(projectData.metadata);
         setChapters(projectData.chapters);
-        console.log('Project data restored successfully');
+        console.log('[useAppCache] Project data restored successfully');
+      } else {
+        console.warn('[useAppCache] Invalid or missing project data');
       }
       
       // 恢复用户状态
-      if (userState) {
+      if (userState && userState.activeChapterId) {
         setActiveChapterId(userState.activeChapterId);
-        setViewMode(userState.viewMode);
-        setSidebarOpen(userState.sidebarOpen);
-        setMemoOpen(userState.memoOpen);
-        setTheme(userState.theme);
-        setSidebarWidth(userState.sidebarWidth);
-        setEditorWidthPercent(userState.editorWidthPercent);
-        setPreviewConfig(userState.previewConfig);
+        setViewMode(userState.viewMode || 'split');
+        setSidebarOpen(userState.sidebarOpen !== undefined ? userState.sidebarOpen : true);
+        setMemoOpen(userState.memoOpen !== undefined ? userState.memoOpen : false);
+        setTheme(userState.theme || 'light');
+        setSidebarWidth(userState.sidebarWidth || 256);
+        setEditorWidthPercent(userState.editorWidthPercent || 50);
+        setPreviewConfig(userState.previewConfig || DEFAULT_PREVIEW_CONFIG);
         
-        console.log('User state restored successfully');
+        console.log('[useAppCache] User state restored successfully');
         
         // 延迟恢复滚动位置和光标位置，确保DOM已渲染
         setTimeout(() => {
-          if (editorRef.current) {
-            editorRef.current.scrollTop = userState.scrollPosition.editor;
+          try {
+            if (editorRef.current) {
+              editorRef.current.scrollTop = userState.scrollPosition?.editor || 0;
+              
+              // 恢复光标位置
+              const cursorStart = userState.cursorPosition?.start || 0;
+              const cursorEnd = userState.cursorPosition?.end || cursorStart;
+              
+              // 设置光标位置
+              editorRef.current.focus();
+              editorRef.current.setSelectionRange(cursorStart, cursorEnd);
+            }
             
-            // 恢复光标位置
-            const cursorStart = userState.cursorPosition?.start || 0;
-            const cursorEnd = userState.cursorPosition?.end || cursorStart;
-            
-            // 设置光标位置
-            editorRef.current.focus();
-            editorRef.current.setSelectionRange(cursorStart, cursorEnd);
+            if (previewRef?.current) {
+              previewRef.current.scrollTop = userState.scrollPosition?.preview || 0;
+            }
+          } catch (error) {
+            console.error('[useAppCache] Error restoring cursor/scroll position:', error);
+          } finally {
+            // 确保恢复完成后更新状态
+            clearTimeout(restorationTimeout);
+            setIsRestoring(false);
+            isInitializedRef.current = true;
+            console.log('[useAppCache] State restoration completed');
           }
-          
-          if (previewRef?.current) {
-            previewRef.current.scrollTop = userState.scrollPosition.preview;
-          }
-          
-          // 确保恢复完成后更新状态
-          setIsRestoring(false);
-          isInitializedRef.current = true;
         }, 100);
       } else {
+        console.warn('[useAppCache] Invalid or missing user state');
         // 如果没有用户状态，也需要重置恢复状态
+        clearTimeout(restorationTimeout);
         setIsRestoring(false);
         isInitializedRef.current = true;
       }
     } catch (error) {
-      console.error('Failed to restore application state:', error);
+      console.error('[useAppCache] Failed to restore application state:', error);
       // 即使出错也要重置恢复状态
       setIsRestoring(false);
       isInitializedRef.current = true;
@@ -203,7 +227,8 @@ export const useAppCache = ({
     setEditorWidthPercent,
     setPreviewConfig,
     editorRef,
-    previewRef
+    previewRef,
+    DEFAULT_PREVIEW_CONFIG
   ]);
   
   // 防抖保存函数

@@ -1,8 +1,9 @@
-// Service Worker for ZenPub PWA
+// Service Worker for ZenPub PWA - Optimized for Vercel
 const CACHE_NAME = 'zenpub-cache-v1';
 const DYNAMIC_CACHE_NAME = 'zenpub-dynamic-v1';
 
 // 静态资源缓存列表 - 只缓存核心资源，减少首次加载时间
+// 使用绝对路径，确保在Vercel环境中正确缓存
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -14,6 +15,7 @@ const STATIC_ASSETS = [
 ];
 
 // 延迟缓存资源 - 在页面加载后再缓存
+// 使用绝对路径，确保在Vercel环境中正确缓存
 const DEFERRED_ASSETS = [
   '/index.css',
   // App scripts and styles
@@ -24,9 +26,13 @@ const DEFERRED_ASSETS = [
   'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;700&family=JetBrains+Mono&display=swap'
 ];
 
+// Vercel环境检测和适配
+const isVercelEnvironment = self.location.hostname.includes('vercel.app') || 
+                            self.location.hostname.includes('vercel.com');
+
 // 安装事件 - 预缓存核心静态资源
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing Service Worker...');
+  console.log('[SW] Installing Service Worker...', isVercelEnvironment ? '(Vercel Environment)' : '');
   
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -40,6 +46,10 @@ self.addEventListener('install', (event) => {
       })
       .catch((error) => {
         console.error('[SW] Installation failed:', error);
+        // 在Vercel环境中，某些资源可能无法缓存，但不应该阻止Service Worker安装
+        if (isVercelEnvironment) {
+          console.warn('[SW] Vercel environment detected, some caching errors may be expected');
+        }
       })
   );
 });
@@ -65,7 +75,7 @@ self.addEventListener('activate', (event) => {
 
 // 激活事件 - 清理旧缓存
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating Service Worker...');
+  console.log('[SW] Activating Service Worker...', isVercelEnvironment ? '(Vercel Environment)' : '');
   
   event.waitUntil(
     caches.keys()
@@ -107,7 +117,12 @@ self.addEventListener('fetch', (event) => {
           if (cachedResponse) {
             // 对于导航请求，仍在后台更新缓存
             if (request.mode === 'navigate') {
-              fetchAndUpdateCache(request);
+              // 在Vercel环境中，延迟更新缓存以避免频繁的重新验证
+              if (isVercelEnvironment) {
+                setTimeout(() => fetchAndUpdateCache(request), 1000);
+              } else {
+                fetchAndUpdateCache(request);
+              }
             }
             return cachedResponse;
           }
@@ -115,7 +130,8 @@ self.addEventListener('fetch', (event) => {
           // 没有缓存，则从网络获取
           return fetchAndUpdateCache(request);
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error('[SW] Fetch failed:', error);
           // 网络请求失败，尝试返回离线页面
           if (request.mode === 'navigate') {
             return caches.match('/');
@@ -170,6 +186,13 @@ function fetchAndUpdateCache(request) {
 
 // 监听来自客户端的消息（用于手动控制缓存）
 self.addEventListener('message', (event) => {
+  // 处理ping消息，用于检查Service Worker是否响应
+  if (event.data && event.data.type === 'PING') {
+    console.log('[SW] Ping received, responding...');
+    event.ports[0].postMessage({ type: 'PONG', timestamp: Date.now() });
+    return;
+  }
+  
   if (event.data && event.data.type === 'CACHE_URLS') {
     const urlsToCache = event.data.urls;
     

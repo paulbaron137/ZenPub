@@ -715,16 +715,27 @@ const App: React.FC = () => {
     setRestoreError(null);
     
     try {
+      console.log('[App] Starting state restoration...');
+      
       // 调用缓存Hook中的恢复函数
       await restoreState();
       
-      // 模拟加载效果
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // 等待状态恢复完成
+      let attempts = 0;
+      while (isRestoring && attempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        attempts++;
+      }
+      
+      // 检查恢复是否成功
+      if (isRestoring) {
+        console.warn('[App] State restoration is taking too long, proceeding anyway');
+      }
       
       setShowRestorePrompt(false);
       showToast("状态已恢复", "success");
     } catch (error) {
-      console.error('恢复状态时出错:', error);
+      console.error('[App] 恢复状态时出错:', error);
       setRestoreError("无法恢复上次编辑状态，请开始新文档");
     } finally {
       setIsRestoringState(false);
