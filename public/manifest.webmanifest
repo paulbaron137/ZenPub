@@ -1,7 +1,7 @@
 {
   "name": "ZenPub",
   "short_name": "ZenPub",
-  "description": "ZenPub - A powerful markdown publishing tool with independent font size controls, smart replacement features, and responsive toolbars",
+  "description": "ZenPub - A powerful markdown publishing tool with independent font size controls, smart replacement features, and expandable mobile toolbars (v2.4.3)",
   "theme_color": "#ffffff",
   "background_color": "#ffffff",
   "display": "standalone",

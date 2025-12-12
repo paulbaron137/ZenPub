@@ -15,7 +15,7 @@ import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig, EditorConfig 
 import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './services/epubService';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 import ScrollableToolbar from './components/ScrollableToolbar';
-import MobileScrollableToolbar from './components/MobileScrollableToolbar';
+import ExpandableToolbar from './components/ExpandableToolbar';
 
 // ... Constants ...
 const DEFAULT_CHAPTER: Chapter = {
@@ -77,7 +77,13 @@ const HELP_CONTENT = `
 - 脚注: 这是一个脚注[^1]
   \`[^1]: 脚注解释内容\`
 
-## v2.4.2 新特性
+## v2.4.3 新特性
+- **工具栏交互优化**: 改进移动端工具栏交互方式，移除滑动功能，改用扩展按钮设计。
+- **空间效率**: 工具栏默认折叠状态节省屏幕空间，点击扩展按钮可显示更多功能。
+- **视觉一致性**: 保持与整体UI设计风格一致，提供流畅的展开/收起动画效果。
+- **智能检测**: 自动检测工具栏内容是否溢出，仅在必要时显示扩展按钮。
+
+## v2.4.2 特性
 - **移动端滑动**: 优化移动端工具栏的触摸滑动体验，支持手势操作和按钮控制。
 - **自适应布局**: 根据屏幕尺寸自动调整工具栏布局和按钮大小，在不同手机上都能良好展示。
 - **触摸优化**: 改进触摸事件处理，增加滑动阈值和视觉反馈，提升操作流畅性。
@@ -791,7 +797,7 @@ const App: React.FC = () => {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-md transition ${isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-black/5 text-gray-600'}`}><Menu size={20} /></button>
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
-            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.4.2</span></h1>
+            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.4.3</span></h1>
           </div>
         </div>
         <div className={`hidden sm:flex rounded-lg p-1 mx-2 ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
@@ -913,7 +919,7 @@ const App: React.FC = () => {
                <div className="flex items-center flex-1">
                   {/* 移动端工具栏 */}
                   <div className="md:hidden w-full">
-                     <MobileScrollableToolbar isDark={isDark} className="w-full">
+                     <ExpandableToolbar isDark={isDark} className="w-full">
                         <button onClick={handleUndo} disabled={historyPtr <= 0} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr > 0 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="撤销 (Ctrl+Z)"><Undo size={18}/></button>
                         <button onClick={handleRedo} disabled={historyPtr >= history.length - 1} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr < history.length - 1 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="重做 (Ctrl+Y)"><Redo size={18}/></button>
                         <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
@@ -931,7 +937,7 @@ const App: React.FC = () => {
                         <button onClick={handleInsertLink} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接 (Ctrl+K)"><Link size={18}/></button>
                         <button onClick={handleInsertImage} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><ImageIcon size={18}/></button>
                         <button onClick={() => setShowSearchPanel(!showSearchPanel)} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'} ${showSearchPanel ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600' : ''}`} title="查找替换 (Ctrl+F)"><SearchIcon size={18}/></button>
-                     </MobileScrollableToolbar>
+                     </ExpandableToolbar>
                   </div>
                   
                   {/* 桌面端工具栏 */}
