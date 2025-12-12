@@ -1,13 +1,13 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-interface ScrollableToolbarProps {
+interface MobileScrollableToolbarProps {
   children: React.ReactNode;
   isDark: boolean;
   className?: string;
 }
 
-const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark, className = '' }) => {
+const MobileScrollableToolbar: React.FC<MobileScrollableToolbarProps> = ({ children, isDark, className = '' }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -25,7 +25,7 @@ const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark,
     if (!container) return;
     
     const { scrollLeft, scrollWidth, clientWidth } = container;
-    setCanScrollLeft(scrollLeft > 0);
+    setCanScrollLeft(scrollLeft > 5); // 5px 容差
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5); // 5px 容差
   }, []);
 
@@ -34,7 +34,8 @@ const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark,
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const scrollAmount = 200; // 每次滚动的像素
+    // 在移动端减少滚动量，以便更精确控制
+    const scrollAmount = window.innerWidth < 640 ? 120 : 180; // 根据屏幕宽度调整
     const newScrollLeft = direction === 'left' 
       ? Math.max(0, container.scrollLeft - scrollAmount)
       : Math.min(container.scrollWidth - container.clientWidth, container.scrollLeft + scrollAmount);
@@ -43,29 +44,6 @@ const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark,
       left: newScrollLeft,
       behavior: 'smooth'
     });
-  }, []);
-
-  // 处理鼠标滚轮事件
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    // 检查是否可以水平滚动
-    const { scrollLeft, scrollWidth, clientWidth } = container;
-    const canHorizontallyScroll = scrollWidth > clientWidth;
-    
-    if (canHorizontallyScroll) {
-      e.preventDefault();
-      
-      // 垂直滚轮映射到水平滚动
-      const scrollDelta = e.deltaY * 0.5; // 调整滚动速度
-      const newScrollLeft = Math.max(0, Math.min(scrollWidth - clientWidth, scrollLeft + scrollDelta));
-      
-      container.scrollTo({
-        left: newScrollLeft,
-        behavior: 'smooth'
-      });
-    }
   }, []);
 
   // 处理触摸开始
@@ -161,14 +139,14 @@ const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark,
       {canScrollLeft && (
         <button
           onClick={() => scrollTo('left')}
-          className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full shadow-md transition-all duration-200 ${
+          className={`absolute left-0 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full shadow-md transition-all duration-200 md:hidden ${
             isDark 
               ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' 
               : 'bg-white text-gray-700 hover:bg-gray-100'
-          } ${isScrolling ? 'opacity-50' : 'opacity-80'} group-hover:opacity-100`}
+          } ${isScrolling ? 'opacity-50' : 'opacity-80'}`}
           aria-label="向左滚动"
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft size={14} />
         </button>
       )}
       
@@ -176,26 +154,25 @@ const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark,
       {canScrollRight && (
         <button
           onClick={() => scrollTo('right')}
-          className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full shadow-md transition-all duration-200 ${
+          className={`absolute right-0 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full shadow-md transition-all duration-200 md:hidden ${
             isDark 
               ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' 
               : 'bg-white text-gray-700 hover:bg-gray-100'
-          } ${isScrolling ? 'opacity-50' : 'opacity-80'} group-hover:opacity-100`}
+          } ${isScrolling ? 'opacity-50' : 'opacity-80'}`}
           aria-label="向右滚动"
         >
-          <ChevronRight size={16} />
+          <ChevronRight size={14} />
         </button>
       )}
       
       {/* 滚动容器 */}
       <div
         ref={scrollContainerRef}
-        onWheel={handleWheel}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`flex items-center overflow-x-auto overflow-y-hidden no-scrollbar scroll-smooth ${
-          isScrolling ? 'cursor-grabbing' : 'cursor-grab'
+        className={`flex items-center overflow-x-auto overflow-y-hidden no-scrollbar scroll-smooth snap-x snap-mandatory ${
+          isScrolling ? '' : ''
         }`}
         style={{
           scrollbarWidth: 'none', // Firefox
@@ -210,7 +187,7 @@ const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark,
       
       {/* 渐变阴影效果 */}
       {canScrollLeft && (
-        <div className={`absolute left-0 top-0 bottom-0 w-6 pointer-events-none z-0 ${
+        <div className={`absolute left-0 top-0 bottom-0 w-4 pointer-events-none z-0 md:hidden ${
           isDark 
             ? 'bg-gradient-to-r from-slate-800 to-transparent' 
             : 'bg-gradient-to-r from-white to-transparent'
@@ -218,14 +195,24 @@ const ScrollableToolbar: React.FC<ScrollableToolbarProps> = ({ children, isDark,
       )}
       
       {canScrollRight && (
-        <div className={`absolute right-0 top-0 bottom-0 w-6 pointer-events-none z-0 ${
+        <div className={`absolute right-0 top-0 bottom-0 w-4 pointer-events-none z-0 md:hidden ${
           isDark 
             ? 'bg-gradient-to-l from-slate-800 to-transparent' 
             : 'bg-gradient-to-l from-white to-transparent'
         }`} />
       )}
+      
+      {/* 滚动提示点 */}
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex space-x-1 md:hidden">
+        <div className={`w-1 h-1 rounded-full transition-opacity ${
+          canScrollLeft ? 'opacity-50' : 'opacity-20'
+        } ${isDark ? 'bg-slate-400' : 'bg-gray-400'}`} />
+        <div className={`w-1 h-1 rounded-full transition-opacity ${
+          canScrollRight ? 'opacity-50' : 'opacity-20'
+        } ${isDark ? 'bg-slate-400' : 'bg-gray-400'}`} />
+      </div>
     </div>
   );
 };
 
-export default ScrollableToolbar;
+export default MobileScrollableToolbar;

@@ -2,11 +2,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 // ... existing imports ...
 import { 
   Menu, BookOpen, Settings, Download, Plus, Trash2, 
-  ChevronLeft, ChevronRight, PenTool, Edit3, Save, 
-  MoreVertical, FileText, X, Image as ImageIcon,
-  HelpCircle, ExternalLink, CheckCircle, AlertCircle,
+  Edit3, X, Image as ImageIcon,
+  HelpCircle, CheckCircle, AlertCircle,
   Bold, Italic, Heading1, Heading2, Heading3, List, Quote, Link, Minus, 
-  MessageSquare, StickyNote, Type, Undo, Redo, AlignVerticalJustifyCenter,
+  StickyNote, Undo, Redo, AlignVerticalJustifyCenter,
   Smartphone, Monitor, File as FileIcon, History, Clock, Upload, FileDown, RotateCcw,
   Search as SearchIcon, Replace, ArrowDown, ArrowUp, XCircle
 } from 'lucide-react';
@@ -16,6 +15,7 @@ import { BookMetadata, Chapter, ViewMode, Snapshot, PreviewConfig, EditorConfig 
 import { exportToEpub, exportToMarkdown, exportToPdf, importEpub } from './services/epubService';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 import ScrollableToolbar from './components/ScrollableToolbar';
+import MobileScrollableToolbar from './components/MobileScrollableToolbar';
 
 // ... Constants ...
 const DEFAULT_CHAPTER: Chapter = {
@@ -77,7 +77,13 @@ const HELP_CONTENT = `
 - 脚注: 这是一个脚注[^1]
   \`[^1]: 脚注解释内容\`
 
-## v2.4.1 新特性
+## v2.4.2 新特性
+- **移动端滑动**: 优化移动端工具栏的触摸滑动体验，支持手势操作和按钮控制。
+- **自适应布局**: 根据屏幕尺寸自动调整工具栏布局和按钮大小，在不同手机上都能良好展示。
+- **触摸优化**: 改进触摸事件处理，增加滑动阈值和视觉反馈，提升操作流畅性。
+- **移动端指示器**: 添加专用的移动端滚动指示器和滑动提示点，提供更直观的导航体验。
+
+## v2.4.1 特性
 - **工具栏滑动**: 新增电脑端上方工具栏的左右滑动功能，支持鼠标滚轮和按钮控制。
 - **视觉反馈**: 添加滚动指示器和渐变阴影效果，提供清晰的滚动状态反馈。
 - **性能优化**: 使用 React 优化技术，确保滑动操作流畅自然。
@@ -93,7 +99,7 @@ const HELP_CONTENT = `
 // ... rest of the App.tsx logic remains same ...
 // (I will output the full file content to ensure consistency)
 
-const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () => void }> = ({ message, type, onClose }) => (
+const Toast: React.FC<{ message: string; type: 'success' | 'error' }> = ({ message, type }) => (
   <div className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 z-[70] animate-fade-in-up ${type === 'success' ? 'bg-green-600 text-white' : 'bg-red-500 text-white'}`}>
     {type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
     <span className="text-sm font-medium">{message}</span>
@@ -764,28 +770,11 @@ const App: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // 新建文档处理函数
-  const handleNewDocument = () => {
-    // 重置到默认状态
-    setMetadata(DEFAULT_METADATA);
-    setChapters([DEFAULT_CHAPTER]);
-    setActiveChapterId(DEFAULT_CHAPTER.id);
-    setViewMode('split');
-    setSidebarOpen(true);
-    setMemoOpen(false);
-    setTheme('light');
-    setSidebarWidth(256);
-    setEditorWidthPercent(50);
-    setPreviewConfig(DEFAULT_PREVIEW_CONFIG);
-    setEditorConfig(DEFAULT_EDITOR_CONFIG);
-    
-    showToast("已创建新文档", "success");
-  };
+
 
   const isDark = theme === 'dark';
 
   // Calculate Styles for Split View
-  const sidebarStyle = { width: sidebarOpen ? (window.innerWidth < 768 ? '18rem' : `${sidebarWidth}px`) : '0px' };
   const editorStyle = viewMode === 'split' ? { width: `${editorWidthPercent}%` } : { width: '100%' };
   const previewStyle = viewMode === 'split' ? { width: `${100 - editorWidthPercent}%` } : { width: '100%' };
 
@@ -802,7 +791,7 @@ const App: React.FC = () => {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className={`p-2 rounded-md transition ${isDark ? 'hover:bg-white/10 text-slate-300' : 'hover:bg-black/5 text-gray-600'}`}><Menu size={20} /></button>
           <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
             <BookOpen size={24} className="hidden xs:block" />
-            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.4.1</span></h1>
+            <h1 className="font-bold text-lg font-serif tracking-tight">ZenPub <span className="text-[10px] uppercase font-sans font-medium opacity-50 ml-0.5 tracking-wider bg-indigo-100 dark:bg-indigo-900/50 px-1 py-0.5 rounded text-indigo-600 dark:text-indigo-300">v2.4.2</span></h1>
           </div>
         </div>
         <div className={`hidden sm:flex rounded-lg p-1 mx-2 ${isDark ? 'bg-slate-700' : 'bg-gray-100'}`}>
@@ -922,32 +911,69 @@ const App: React.FC = () => {
           <div className={`flex flex-col h-full overflow-hidden transition-all duration-0 relative ${viewMode === 'preview' ? 'hidden' : 'flex'} bg-white dark:bg-slate-900`} style={editorStyle}>
             <div className={`h-12 flex-none flex items-center justify-between px-2 sm:px-4 border-b space-x-2 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-100'}`}>
                <div className="flex items-center flex-1">
-                  <ScrollableToolbar isDark={isDark} className="w-full">
-                     <button onClick={handleUndo} disabled={historyPtr <= 0} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr > 0 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="撤销 (Ctrl+Z)"><Undo size={16}/></button>
-                     <button onClick={handleRedo} disabled={historyPtr >= history.length - 1} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr < history.length - 1 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="重做 (Ctrl+Y)"><Redo size={16}/></button>
-                     <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
-                     <button onClick={() => insertSyntax('**', '**')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="加粗 (Ctrl+B)"><Bold size={16}/></button>
-                     <button onClick={() => insertSyntax('*', '*')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="斜体 (Ctrl+I)"><Italic size={16}/></button>
-                     <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
-                     <button onClick={() => insertSyntax('# ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题1 (Ctrl+1)"><Heading1 size={16}/></button>
-                     <button onClick={() => insertSyntax('## ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题2 (Ctrl+2)"><Heading2 size={16}/></button>
-                     <button onClick={() => insertSyntax('### ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题3 (Ctrl+3)"><Heading3 size={16}/></button>
-                     <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
-                     <button onClick={() => insertSyntax('- ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="列表"><List size={16}/></button>
-                     <button onClick={() => insertSyntax('> ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="引用"><Quote size={16}/></button>
-                     <button onClick={() => insertSyntax('\n---\n')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="分割线"><Minus size={16}/></button>
-                     <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
-                     <button onClick={handleInsertLink} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接 (Ctrl+K)"><Link size={16}/></button>
-                     <button onClick={handleInsertImage} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><ImageIcon size={16}/></button>
-                     <button onClick={() => setShowSearchPanel(!showSearchPanel)} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'} ${showSearchPanel ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600' : ''}`} title="查找替换 (Ctrl+F)"><SearchIcon size={16}/></button>
-                  </ScrollableToolbar>
+                  {/* 移动端工具栏 */}
+                  <div className="md:hidden w-full">
+                     <MobileScrollableToolbar isDark={isDark} className="w-full">
+                        <button onClick={handleUndo} disabled={historyPtr <= 0} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr > 0 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="撤销 (Ctrl+Z)"><Undo size={18}/></button>
+                        <button onClick={handleRedo} disabled={historyPtr >= history.length - 1} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr < history.length - 1 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="重做 (Ctrl+Y)"><Redo size={18}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={() => insertSyntax('**', '**')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="加粗 (Ctrl+B)"><Bold size={18}/></button>
+                        <button onClick={() => insertSyntax('*', '*')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="斜体 (Ctrl+I)"><Italic size={18}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={() => insertSyntax('# ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题1 (Ctrl+1)"><Heading1 size={18}/></button>
+                        <button onClick={() => insertSyntax('## ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题2 (Ctrl+2)"><Heading2 size={18}/></button>
+                        <button onClick={() => insertSyntax('### ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题3 (Ctrl+3)"><Heading3 size={18}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={() => insertSyntax('- ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="列表"><List size={18}/></button>
+                        <button onClick={() => insertSyntax('> ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="引用"><Quote size={18}/></button>
+                        <button onClick={() => insertSyntax('\n---\n')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="分割线"><Minus size={18}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={handleInsertLink} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接 (Ctrl+K)"><Link size={18}/></button>
+                        <button onClick={handleInsertImage} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><ImageIcon size={18}/></button>
+                        <button onClick={() => setShowSearchPanel(!showSearchPanel)} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'} ${showSearchPanel ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600' : ''}`} title="查找替换 (Ctrl+F)"><SearchIcon size={18}/></button>
+                     </MobileScrollableToolbar>
+                  </div>
+                  
+                  {/* 桌面端工具栏 */}
+                  <div className="hidden md:flex w-full">
+                     <ScrollableToolbar isDark={isDark} className="w-full">
+                        <button onClick={handleUndo} disabled={historyPtr <= 0} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr > 0 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="撤销 (Ctrl+Z)"><Undo size={16}/></button>
+                        <button onClick={handleRedo} disabled={historyPtr >= history.length - 1} className={`p-1.5 rounded transition flex-shrink-0 ${historyPtr < history.length - 1 ? (isDark ? 'hover:bg-slate-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600') : 'opacity-30 cursor-not-allowed text-gray-400'}`} title="重做 (Ctrl+Y)"><Redo size={16}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={() => insertSyntax('**', '**')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="加粗 (Ctrl+B)"><Bold size={16}/></button>
+                        <button onClick={() => insertSyntax('*', '*')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="斜体 (Ctrl+I)"><Italic size={16}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={() => insertSyntax('# ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题1 (Ctrl+1)"><Heading1 size={16}/></button>
+                        <button onClick={() => insertSyntax('## ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题2 (Ctrl+2)"><Heading2 size={16}/></button>
+                        <button onClick={() => insertSyntax('### ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="标题3 (Ctrl+3)"><Heading3 size={16}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={() => insertSyntax('- ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="列表"><List size={16}/></button>
+                        <button onClick={() => insertSyntax('> ')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="引用"><Quote size={16}/></button>
+                        <button onClick={() => insertSyntax('\n---\n')} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="分割线"><Minus size={16}/></button>
+                        <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1 flex-shrink-0"></div>
+                        <button onClick={handleInsertLink} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`} title="插入链接 (Ctrl+K)"><Link size={16}/></button>
+                        <button onClick={handleInsertImage} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}><ImageIcon size={16}/></button>
+                        <button onClick={() => setShowSearchPanel(!showSearchPanel)} className={`p-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 transition flex-shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'} ${showSearchPanel ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600' : ''}`} title="查找替换 (Ctrl+F)"><SearchIcon size={16}/></button>
+                     </ScrollableToolbar>
+                  </div>
                </div>
-               <div className="flex items-center space-x-2 pl-2 border-l dark:border-slate-700 flex-none">
-                  <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.max(10, p.fontSize - 1) }))} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Minus size={12}/></button>
-                  <span className="text-xs text-gray-500 font-mono w-4 text-center">{editorConfig.fontSize}</span>
-                  <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.min(24, p.fontSize + 1) }))} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Plus size={12}/></button>
-                  <button onClick={() => setIsTypewriterMode(!isTypewriterMode)} className={`p-2 rounded transition ${isTypewriterMode ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`} title="打字机模式"><AlignVerticalJustifyCenter size={18} /></button>
-                  <button onClick={() => setMemoOpen(!memoOpen)} className={`p-2 rounded transition relative ${memoOpen ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'hover:bg-gray-100 text-gray-400 dark:hover:bg-slate-700'}`}><StickyNote size={18}/>{activeChapter.memo && activeChapter.memo.trim().length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800"></span>}</button>
+               <div className="flex items-center space-x-1 sm:space-x-2 pl-2 border-l dark:border-slate-700 flex-none">
+                  {/* 移动端更小的按钮和间距 */}
+                  <div className="flex items-center sm:hidden">
+                     <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.max(10, p.fontSize - 1) }))} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Minus size={14}/></button>
+                     <span className="text-xs text-gray-500 font-mono w-4 text-center">{editorConfig.fontSize}</span>
+                     <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.min(24, p.fontSize + 1) }))} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Plus size={14}/></button>
+                     <button onClick={() => setIsTypewriterMode(!isTypewriterMode)} className={`p-1.5 rounded transition ${isTypewriterMode ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`} title="打字机模式"><AlignVerticalJustifyCenter size={16} /></button>
+                     <button onClick={() => setMemoOpen(!memoOpen)} className={`p-1.5 rounded transition relative ${memoOpen ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'hover:bg-gray-100 text-gray-400 dark:hover:bg-slate-700'}`}><StickyNote size={16}/>{activeChapter.memo && activeChapter.memo.trim().length > 0 && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full border border-white dark:border-slate-800"></span>}</button>
+                  </div>
+                  {/* 桌面端按钮 */}
+                  <div className="hidden sm:flex items-center space-x-2">
+                     <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.max(10, p.fontSize - 1) }))} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Minus size={12}/></button>
+                     <span className="text-xs text-gray-500 font-mono w-4 text-center">{editorConfig.fontSize}</span>
+                     <button onClick={() => setEditorConfig(p => ({ ...p, fontSize: Math.min(24, p.fontSize + 1) }))} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><Plus size={12}/></button>
+                     <button onClick={() => setIsTypewriterMode(!isTypewriterMode)} className={`p-2 rounded transition ${isTypewriterMode ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'}`} title="打字机模式"><AlignVerticalJustifyCenter size={18} /></button>
+                     <button onClick={() => setMemoOpen(!memoOpen)} className={`p-2 rounded transition relative ${memoOpen ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400' : 'hover:bg-gray-100 text-gray-400 dark:hover:bg-slate-700'}`}><StickyNote size={18}/>{activeChapter.memo && activeChapter.memo.trim().length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800"></span>}</button>
+                  </div>
                </div>
             </div>
 
